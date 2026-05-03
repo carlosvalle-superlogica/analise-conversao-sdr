@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 
 # 1. Configuração visual "Clean"
 st.set_page_config(page_title="Análise SDR", layout="wide")
@@ -12,44 +11,53 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Conexão com o Google Sheets
-# Substituímos o link de edição pelo link de exportação de dados
-url = "https://docs.google.com/spreadsheets/d/1EkLVZp29NiaMe7JZ3Fl8ODD_wjxbN32B-RHYF4KiCEA/export?format=csv"
-
+# 2. Carregando os dados do arquivo que você subiu
 try:
-    # Lendo os dados como CSV diretamente do Google Sheets
-    df = pd.read_csv(url)
+    df = pd.read_csv('bd-teste-sistema.csv')
     
-    # 3. Barra Lateral (Filtros baseados nos dados reais)
+    # Tratamento de datas (garantindo que o sistema entenda o que é data)
+    colunas_data = ['Data de criação', 'Contato Realizado ', '[IS/SDR] Data do Agendamento', '[IS/Closer] Reunião Ocorrida ', 'Data de fechamento']
+    for col in colunas_data:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+
+    # 3. Barra Lateral (Filtros dinâmicos)
     st.sidebar.header("Filtros de Análise")
     
-    # Criando filtros dinâmicos baseados nas suas colunas
-    tipos_disponiveis = df["[IS] Tipo de lead"].unique().tolist() if "[IS] Tipo de lead" in df.columns else []
-    filtro_tipo = st.sidebar.multiselect("Tipo de Lead", tipos_disponiveis)
+    tipos = df["[IS] Tipo de lead"].dropna().unique().tolist()
+    filtro_tipo = st.sidebar.multiselect("Tipo de Lead", tipos, default=tipos)
 
-    origens_disponiveis = df["[IS] Origem do lead"].unique().tolist() if "[IS] Origem do lead" in df.columns else []
-    filtro_origem = st.sidebar.multiselect("Origem do Lead", origens_disponiveis)
+    origens = df["[IS] Origem do lead"].dropna().unique().tolist()
+    filtro_origem = st.sidebar.multiselect("Origem do Lead", origens, default=origens)
 
-    # 4. Corpo Principal
+    # Aplicando os filtros nos dados
+    df_filtrado = df[df["[IS] Tipo de lead"].isin(filtro_tipo) & df["[IS] Origem do lead"].isin(filtro_origem)]
+
+    # 4. Lógica do Funil (Assertividade)
+    total_leads = len(df_filtrado)
+    contatos = df_filtrado['Contato Realizado '].notna().sum()
+    agendados = df_filtrado['[IS/SDR] Data do Agendamento'].notna().sum()
+    reunioes = df_filtrado['[IS/Closer] Reunião Ocorrida '].notna().sum()
+    
+    # Regra de Fechamento: Etapa é Fechado/Pago E tem Data de Fechamento
+    fechados = df_filtrado[
+        (df_filtrado['Etapa do negócio'].isin(['Fechado', 'Pago'])) & 
+        (df_filtrado['Data de fechamento'].notna())
+    ].shape[0]
+
+    # 5. Exibição dos Resultados
     st.title("📊 Painel de Conversão Comercial")
 
-    # Por enquanto, vamos apenas contar o total de linhas para testar a conexão
-    total_leads = len(df)
-
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Total Leads", total_leads)
-    col2.metric("Contatos Realizados", "0")
-    col3.metric("Agendamentos", "0")
-    col4.metric("Reuniões Ocorridas", "0")
-    col5.metric("Fechados (Pagos)", "0")
+    col1.metric("Leads", total_leads)
+    col2.metric("Contatos", contatos)
+    col3.metric("Agendados", agendados)
+    col4.metric("Reuniões", reunioes)
+    col5.metric("Fechados", fechados)
 
     st.divider()
-    st.success("Conexão estabelecida com sucesso!")
-    
-    # Exibe as primeiras linhas para confirmarmos se as colunas estão certas
-    st.write("Amostra dos dados lidos:")
-    st.dataframe(df.head())
+    st.subheader("Base de Dados (Filtro Atual)")
+    st.dataframe(df_filtrado[['ID do registro.', 'Nome do negócio', 'Etapa do negócio', 'Data de fechamento']].head(10))
 
 except Exception as e:
-    st.error(f"Erro ao conectar com a planilha: {e}")
-    st.info("Verifique se o compartilhamento na Superlógica permite acesso via link.")
+    st.error(f"Erro ao carregar o arquivo: {e}")
