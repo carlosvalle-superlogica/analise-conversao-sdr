@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuração de Layout
+# 1. Configuração de Layout e Estilo (Fundo Azul nos Indicadores)
 st.set_page_config(page_title="Análise SDR", layout="wide")
 
 st.markdown("""
@@ -9,7 +9,7 @@ st.markdown("""
     /* Fundo da página */
     .stApp { background-color: #F0F8FF; }
     
-    /* Estilo dos Cards */
+    /* Estilo dos Cards Principais */
     div[data-testid="stMetricValue"] {
         background-color: #FFFFFF;
         border-radius: 10px;
@@ -18,12 +18,18 @@ st.markdown("""
         color: #0D47A1;
     }
     
-    /* REMOVENDO O VERMELHO: Forçando os indicadores (deltas) a serem azuis ou cinzas */
-    [data-testid="stMetricDelta"] svg {
-        display: none; /* Remove a setinha de subida/descida se quiser */
+    /* AJUSTE SOLICITADO: Trocar o fundo vermelho por Azul nos indicadores */
+    [data-testid="stMetricDelta"] > div {
+        background-color: #1565C0 !important; /* Azul Forte */
+        color: white !important;               /* Texto Branco para ler no azul */
+        border-radius: 5px;
+        padding: 2px 8px;
+        font-weight: bold;
     }
-    div[data-testid="stMetricDelta"] > div {
-        color: #4682B4 !important; /* Transforma o texto de baixo em Azul Marinho */
+    
+    /* Remove a setinha vermelha/verde para ficar mais limpo */
+    [data-testid="stMetricDelta"] svg {
+        display: none;
     }
     
     h1, h2, h3 { color: #0D47A1 !important; }
@@ -31,6 +37,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 try:
+    # Carregando os dados
     df = pd.read_csv('bd-teste-sistema.csv')
     df.columns = df.columns.str.strip()
 
@@ -61,30 +68,28 @@ try:
 
     st.title("📊 Dashboard de Conversão Comercial")
 
-    # Exibição das Métricas - Usando delta_color="off" para não ficar vermelho/verde
+    # Exibição das Métricas
     col1, col2, col3, col4, col5 = st.columns(5)
     
     col1.metric("Leads", L)
-    
-    # delta_color="off" deixa o texto cinza/azul padrão, sem o alerta de perigo
-    col2.metric("Contatos", C, f"{(C/L*100):.1f}% de conversão", delta_color="off")
-    col3.metric("Agendados", A, f"{(A/C*100):.1f}% de conversão", delta_color="off")
-    col4.metric("Reuniões", R, f"{(R/L*100):.1f}% sobre total", delta_color="off")
-    col5.metric("Fechados", F, f"{(F/L*100):.1f}% sobre total", delta_color="off")
+    # Note que mantemos delta_color="normal" para o CSS capturar o elemento, 
+    # mas o CSS acima vai "atropelar" a cor vermelha e colocar Azul.
+    col2.metric("Contatos", C, f"{(C/L*100):.1f}%")
+    col3.metric("Agendados", A, f"{(A/C*100):.1f}%")
+    col4.metric("Reuniões", R, f"{(R/L*100):.1f}%")
+    col5.metric("Fechados", F, f"{(F/L*100):.1f}%")
 
     st.divider()
 
-    # Gráficos
-    st.subheader("📈 Taxas de Conversão")
+    # Gráficos de Barra (Visualização complementar)
+    st.subheader("📈 Funil de Conversão")
     c1, c2 = st.columns(2)
     with c1:
         st.write("**Lead x Reunião Ocorrida**")
         st.progress((R/L) if L>0 else 0)
-        st.write(f"{(R/L*100):.1f}%")
     with c2:
         st.write("**Lead x Fechado / Pago**")
         st.progress((F/L) if L>0 else 0)
-        st.write(f"{(F/L*100):.1f}%")
 
 except Exception as e:
-    st.error(f"Erro: {e}")
+    st.error(f"Erro no processamento: {e}")
