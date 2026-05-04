@@ -39,7 +39,7 @@ try:
     
     df['Data Fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
     
-    # --- PREPARAÇÃO SEGURA PARA OS NOVOS FILTROS LATERAIS ---
+    # --- PREPARAÇÃO SEGURA PARA OS FILTROS LATERAIS ---
     col_sdr = '[IS/SDR] SDR Responsável'
     col_closer = '[IS/SDR] Closer Responsável'
     
@@ -59,14 +59,14 @@ try:
     origens = sorted(df["[IS] Origem do lead"].dropna().unique().tolist())
     filtro_origem = st.sidebar.multiselect("Origem do Lead", origens, default=origens)
 
-    # ---> ÚNICA INCLUSÃO: FILTROS DE PESSOAS NA LATERAL
+    # FILTROS DE PESSOAS NA LATERAL
     lista_sdr = sorted(df['Filtro_SDR'].unique().tolist())
     filtro_sdr = st.sidebar.multiselect("SDR Responsável", lista_sdr, default=lista_sdr)
 
     lista_closer = sorted(df['Filtro_Closer'].unique().tolist())
     filtro_closer = st.sidebar.multiselect("Closer Responsável", lista_closer, default=lista_closer)
 
-    # Aplicação do Filtro de Atributos (Origem, Tipo + OS NOVOS FILTROS LATERAIS)
+    # Aplicação do Filtro de Atributos (Origem, Tipo, SDR, Closer)
     mask_atributos = (
         (df["[IS] Tipo de lead"].isin(filtro_tipo)) & 
         (df["[IS] Origem do lead"].isin(filtro_origem)) &
@@ -75,7 +75,6 @@ try:
     )
     df_base = df[mask_atributos].copy()
 
-    # ---> DAQUI PARA BAIXO, O CÓDIGO É 100% IDÊNTICO AO CÓDIGO DEFINITIVO
     # Aplicação do Filtro TEMPORAL (Igual ao HubSpot: Conta o evento dentro do mês)
     if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
         p_start, p_end = periodo[0], periodo[1]
@@ -93,7 +92,7 @@ try:
         mask_R = df_base['Data Reuniao'].notna()
         mask_F = df_base['Etapa do negócio'].isin(['Fechado', 'Pago'])
 
-    # CÁLCULOS DO TOPO (Resultados cruzados com o seu CRM)
+    # CÁLCULOS DO TOPO
     L = mask_L.sum()
     C = mask_C.sum()
     A = mask_A.sum()
@@ -111,16 +110,14 @@ try:
 
     st.divider()
 
-    # TABELAS ABAIXO (Ajustadas para respeitar a mesma matemática de Evento)
+    # TABELAS DE ORIGEM E TIPO
     def criar_tabela_evento(coluna_nome):
         leads_cat = df_base[mask_L].groupby(coluna_nome).size().reset_index(name='Leads')
         reunioes_cat = df_base[mask_R].groupby(coluna_nome).size().reset_index(name='Reunioes')
         fechados_cat = df_base[mask_F].groupby(coluna_nome).size().reset_index(name='Fechados')
         
-        # Junta tudo, inclusive leads antigos que geraram reunião no mês atual
         tabela = leads_cat.merge(reunioes_cat, on=coluna_nome, how='outer').merge(fechados_cat, on=coluna_nome, how='outer').fillna(0)
         
-        # Proteção matemática caso a categoria tenha 0 leads novos mas gerou reunião
         tabela['Lead x Reunião (%)'] = tabela.apply(lambda row: f"{(row['Reunioes']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
         tabela['Lead x Fechado (%)'] = tabela.apply(lambda row: f"{(row['Fechados']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
         
@@ -133,6 +130,32 @@ try:
     with c_b:
         st.subheader("🏷️ Por Tipo")
         st.dataframe(criar_tabela_evento("[IS] Tipo de lead"), use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ---> NOVA ADIÇÃO: PERFORMANCE POR SDR
+    st.subheader("🏆 Performance por SDR")
+    
+    # Contamos cada evento agrupando pelo SDR
+    sdr_l = df_base[mask_L].groupby('Filtro_SDR').size().reset_index(name='Leads')
+    sdr_c = df_base[mask_C].groupby('Filtro_SDR').size().reset_index(name='Contatos')
+    sdr_a = df_base[mask_A].groupby('Filtro_SDR').size().reset_index(name='Agendados')
+    sdr_r = df_base[mask_R].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
+    
+    # Unimos as colunas para formar a tabela completa do SDR
+    df_sdr = sdr_l.merge(sdr_c, on='Filtro_SDR', how='outer') \
+                  .merge(sdr_a, on='Filtro_SDR', how='outer') \
+                  .merge(sdr_r, on='Filtro_SDR', how='outer').fillna(0)
+                  
+    df_sdr = df_sdr.rename(columns={'Filtro_SDR': 'SDR Responsável'})
+    
+    # Calculamos as conversões em cascata com proteção matemática
+    df_sdr['Cont/Lead (%)'] = df_sdr.apply(lambda row: f"{(row['Contatos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
+    df_sdr['Agend/Cont (%)'] = df_sdr.apply(lambda row: f"{(row['Agendados']/row['Contatos']*100):.1f}%" if row['Contatos'] > 0 else "-", axis=1)
+    df_sdr['Ocorr/Agend (%)'] = df_sdr.apply(lambda row: f"{(row['Ocorridos']/row['Agendados']*100):.1f}%" if row['Agendados'] > 0 else "-", axis=1)
+    
+    colunas_finais_sdr = ['SDR Responsável', 'Leads', 'Contatos', 'Cont/Lead (%)', 'Agendados', 'Agend/Cont (%)', 'Ocorridos', 'Ocorr/Agend (%)']
+    st.dataframe(df_sdr[colunas_finais_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
 except Exception as e:
     st.error(f"Erro no processamento de dados: {e}")
