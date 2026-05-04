@@ -30,9 +30,9 @@ st.markdown("""
         box-shadow: none !important;
     }
     
-    /* NOME DOS CARDS (Títulos das Métricas) - Forçado para AZUL para não sumir */
+    /* NOME DOS CARDS (Títulos das Métricas) - Forçado para AZUL */
     [data-testid="stMetricLabel"] {
-        color: #1565C0 !important; /* Azul escuro corporativo */
+        color: #1565C0 !important; 
         font-size: 0.85rem !important; 
         font-weight: 700 !important;
         text-transform: uppercase !important;
@@ -47,7 +47,7 @@ st.markdown("""
         margin-top: 0.25rem !important;
     }
     
-    /* PERCENTAGEM DOS CARDS (Onde entra o nome Contato, Agendado, etc) */
+    /* PERCENTAGEM DOS CARDS */
     [data-testid="stMetricDelta"] > div {
         background-color: transparent !important;
         color: #09ab3b !important; /* Verde */
@@ -158,9 +158,11 @@ try:
             sdr_final = filtro_sdr if filtro_sdr else lista_sdr
             closer_final = filtro_closer if filtro_closer else lista_closer
 
+            # MÁSCARA BASE DOS ATRIBUTOS (Aplicado a Período e YTD)
             mask_atributos = ((df["[IS] Tipo de lead"].isin(tipo_final)) & (df["[IS] Origem do lead"].isin(origem_final)) & (df['Filtro_SDR'].isin(sdr_final)) & (df['Filtro_Closer'].isin(closer_final)))
             df_base = df[mask_atributos].copy()
 
+            # --- MÁSCARAS DO PERÍODO SELECIONADO ---
             if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
                 p_start, p_end = periodo[0], periodo[1]
                 mask_L = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
@@ -168,20 +170,44 @@ try:
                 mask_A = (df_base['Data Agendamento'].dt.date >= p_start) & (df_base['Data Agendamento'].dt.date <= p_end)
                 mask_R = (df_base['Data Reuniao'].dt.date >= p_start) & (df_base['Data Reuniao'].dt.date <= p_end)
                 mask_F = (df_base['Data Fechamento'].dt.date >= p_start) & (df_base['Data Fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
+                ano_ref = p_end.year
             else:
                 mask_L = df_base['Data de criação'].notna(); mask_C = df_base['Data Contato'].notna(); mask_A = df_base['Data Agendamento'].notna(); mask_R = df_base['Data Reuniao'].notna(); mask_F = df_base['Etapa do negócio'].isin(['Fechado', 'Pago'])
+                ano_ref = df_base['Data de criação'].dt.year.max() if not df_base.empty else 2026
 
             L, C, A, R, F = mask_L.sum(), mask_C.sum(), mask_A.sum(), mask_R.sum(), mask_F.sum()
 
-            st.write("")
-            m1, m2, m3, m4, m5 = st.columns(5)
+            # --- MÁSCARAS DO ACUMULADO DO ANO (YTD) ---
+            mask_L_ytd = df_base['Data de criação'].dt.year == ano_ref
+            mask_C_ytd = df_base['Data Contato'].dt.year == ano_ref
+            mask_A_ytd = df_base['Data Agendamento'].dt.year == ano_ref
+            mask_R_ytd = df_base['Data Reuniao'].dt.year == ano_ref
+            mask_F_ytd = (df_base['Data Fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             
-            # --- AJUSTE DOS NOMES DE PERCENTAGEM AQUI ---
+            L_ytd, C_ytd, A_ytd = mask_L_ytd.sum(), mask_C_ytd.sum(), mask_A_ytd.sum()
+            R_ytd, F_ytd = mask_R_ytd.sum(), mask_F_ytd.sum()
+
+            st.write("")
+            
+            # --- RENDERIZAÇÃO: PERÍODO SELECIONADO ---
+            st.markdown("<h3 style='font-size: 14px; color: #5e606b; margin-bottom: 10px; text-transform: uppercase;'>Visão do Período Selecionado</h3>", unsafe_allow_html=True)
+            m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Leads Entrantes", f"{L:,.0f}".replace(',','.'))
             m2.metric("Contatos Feitos", f"{C:,.0f}".replace(',','.'), f"{(C/L*100):.1f}% Contato" if L>0 else "0%")
             m3.metric("Agendamentos", f"{A:,.0f}".replace(',','.'), f"{(A/C*100):.1f}% Agendado" if C>0 else "0%")
             m4.metric("Reuniões Ocorridas", f"{R:,.0f}".replace(',','.'), f"{(R/A*100):.1f}% Ocorrido" if A>0 else "0%")
             m5.metric("Negócios Fechados", f"{F:,.0f}".replace(',','.'), f"{(F/R*100):.1f}% Fechado" if R>0 else "0%")
+
+            st.write("")
+
+            # --- RENDERIZAÇÃO: ACUMULADO DO ANO ---
+            st.markdown(f"<h3 style='font-size: 14px; color: #5e606b; margin-bottom: 10px; text-transform: uppercase;'>Acumulado do Ano ({ano_ref})</h3>", unsafe_allow_html=True)
+            my1, my2, my3, my4, my5 = st.columns(5)
+            my1.metric("Leads (YTD)", f"{L_ytd:,.0f}".replace(',','.'))
+            my2.metric("Contatos (YTD)", f"{C_ytd:,.0f}".replace(',','.'), f"{(C_ytd/L_ytd*100):.1f}% Contato" if L_ytd>0 else "0%")
+            my3.metric("Agendamentos (YTD)", f"{A_ytd:,.0f}".replace(',','.'), f"{(A_ytd/C_ytd*100):.1f}% Agendado" if C_ytd>0 else "0%")
+            my4.metric("Reuniões (YTD)", f"{R_ytd:,.0f}".replace(',','.'), f"{(R_ytd/A_ytd*100):.1f}% Ocorrido" if A_ytd>0 else "0%")
+            my5.metric("Fechados (YTD)", f"{F_ytd:,.0f}".replace(',','.'), f"{(F_ytd/R_ytd*100):.1f}% Fechado" if R_ytd>0 else "0%")
 
             st.divider()
 
