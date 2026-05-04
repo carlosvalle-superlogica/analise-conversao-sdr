@@ -66,7 +66,7 @@ try:
     lista_closer = sorted(df['Filtro_Closer'].unique().tolist())
     filtro_closer = st.sidebar.multiselect("Closer Responsável", lista_closer, default=lista_closer)
 
-    # Aplicação do Filtro de Atributos (Origem, Tipo, SDR, Closer)
+    # Aplicação do Filtro de Atributos
     mask_atributos = (
         (df["[IS] Tipo de lead"].isin(filtro_tipo)) & 
         (df["[IS] Origem do lead"].isin(filtro_origem)) &
@@ -110,12 +110,9 @@ try:
         leads_cat = df_base[mask_L].groupby(coluna_nome).size().reset_index(name='Leads')
         reunioes_cat = df_base[mask_R].groupby(coluna_nome).size().reset_index(name='Reunioes')
         fechados_cat = df_base[mask_F].groupby(coluna_nome).size().reset_index(name='Fechados')
-        
         tabela = leads_cat.merge(reunioes_cat, on=coluna_nome, how='outer').merge(fechados_cat, on=coluna_nome, how='outer').fillna(0)
-        
         tabela['Lead x Reunião (%)'] = tabela.apply(lambda row: f"{(row['Reunioes']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
         tabela['Lead x Fechado (%)'] = tabela.apply(lambda row: f"{(row['Fechados']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
-        
         return tabela[[coluna_nome, 'Leads', 'Lead x Reunião (%)', 'Lead x Fechado (%)']].sort_values(by='Leads', ascending=False)
 
     c_a, c_b = st.columns(2)
@@ -128,33 +125,37 @@ try:
 
     st.divider()
 
-    # ---> PERFORMANCE POR SDR (ORDEM DAS COLUNAS AJUSTADA)
+    # PERFORMANCE POR SDR
     st.subheader("🏆 Performance por SDR")
-    
     sdr_l = df_base[mask_L].groupby('Filtro_SDR').size().reset_index(name='Leads')
     sdr_c = df_base[mask_C].groupby('Filtro_SDR').size().reset_index(name='Contatos')
     sdr_a = df_base[mask_A].groupby('Filtro_SDR').size().reset_index(name='Agendados')
     sdr_r = df_base[mask_R].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
-    
-    df_sdr = sdr_l.merge(sdr_c, on='Filtro_SDR', how='outer') \
-                  .merge(sdr_a, on='Filtro_SDR', how='outer') \
-                  .merge(sdr_r, on='Filtro_SDR', how='outer').fillna(0)
-                  
+    df_sdr = sdr_l.merge(sdr_c, on='Filtro_SDR', how='outer').merge(sdr_a, on='Filtro_SDR', how='outer').merge(sdr_r, on='Filtro_SDR', how='outer').fillna(0)
     df_sdr = df_sdr.rename(columns={'Filtro_SDR': 'SDR Responsável'})
-    
-    # Cálculos de porcentagem
     df_sdr['Cont/Lead (%)'] = df_sdr.apply(lambda row: f"{(row['Contatos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
     df_sdr['Agend/Cont (%)'] = df_sdr.apply(lambda row: f"{(row['Agendados']/row['Contatos']*100):.1f}%" if row['Contatos'] > 0 else "-", axis=1)
     df_sdr['Ocorr/Agend (%)'] = df_sdr.apply(lambda row: f"{(row['Ocorridos']/row['Agendados']*100):.1f}%" if row['Agendados'] > 0 else "-", axis=1)
+    colunas_sdr = ['SDR Responsável', 'Leads', 'Contatos', 'Agendados', 'Ocorridos', 'Cont/Lead (%)', 'Agend/Cont (%)', 'Ocorr/Agend (%)']
+    st.dataframe(df_sdr[colunas_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+
+    # ---> NOVA ADIÇÃO: PERFORMANCE POR CLOSER
+    st.subheader("🤝 Performance por Closer")
     
-    # REORDENAÇÃO SOLICITADA: Quantidades antes dos %
-    colunas_finais_sdr = [
-        'SDR Responsável', 
-        'Leads', 'Contatos', 'Agendados', 'Ocorridos', # Quantidades
-        'Cont/Lead (%)', 'Agend/Cont (%)', 'Ocorr/Agend (%)' # Porcentagens
-    ]
+    # Filtro para ignorar o "Sem Closer" nesta tabela específica
+    mask_has_closer = df_base['Filtro_Closer'] != 'Sem Closer'
     
-    st.dataframe(df_sdr[colunas_finais_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+    cl_r = df_base[mask_R & mask_has_closer].groupby('Filtro_Closer').size().reset_index(name='Ocorridos')
+    cl_f = df_base[mask_F & mask_has_closer].groupby('Filtro_Closer').size().reset_index(name='Fechados')
+    
+    df_closer = cl_r.merge(cl_f, on='Filtro_Closer', how='outer').fillna(0)
+    df_closer = df_closer.rename(columns={'Filtro_Closer': 'Closer Responsável'})
+    
+    df_closer['Fechado/Ocorrido (%)'] = df_closer.apply(lambda row: f"{(row['Fechados']/row['Ocorridos']*100):.1f}%" if row['Ocorridos'] > 0 else "-", axis=1)
+    
+    # Ordem: Quantidades antes dos %
+    colunas_closer = ['Closer Responsável', 'Ocorridos', 'Fechados', 'Fechado/Ocorrido (%)']
+    st.dataframe(df_closer[colunas_closer].sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
 
 except Exception as e:
     st.error(f"Erro no processamento de dados: {e}")
