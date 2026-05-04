@@ -1,92 +1,120 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuração de Layout e Estilo (Configuração Inicial)
+# 1. Configuração de Layout e Estilo
 st.set_page_config(page_title="Hub Comercial", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS DEFINITIVO E BLINDADO (Tema Premium Idêntico às Imagens) ---
+# --- CSS BASEADO NO SEU TEMPLATE TAILWIND ---
 st.markdown("""
     <style>
-    /* 1. RESET E FUNDO PRINCIPAL (Light Mode Forçado) */
+    /* Importando a fonte Inter idêntica ao seu HTML */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    /* 1. RESET E FUNDO PRINCIPAL */
     .stApp {
-        background-color: #F8FAFC !important;
+        background-color: #f8f9ff !important;
+        font-family: 'Inter', sans-serif !important;
     }
     
-    /* Garantir que todos os textos da área principal fiquem escuros */
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp p, .stApp label {
-        color: #0F172A !important;
+    /* Textos Gerais */
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp label {
+        color: #0b1c30 !important;
+        font-family: 'Inter', sans-serif !important;
     }
 
-    /* 2. BARRA LATERAL (Premium Dark Idêntico às Imagens: #0F172A) */
+    /* 2. BARRA LATERAL (Slate 900) */
     [data-testid="stSidebar"] {
-        background-color: #0F172A !important;
-        border-right: none !important;
+        background-color: #0f172a !important;
+        border-right: 1px solid #1e293b !important;
     }
     
-    /* Forçar textos e botões da lateral a serem brancos */
-    [data-testid="stSidebar"] * {
-        color: #F8FAFC !important;
-    }
-
-    /* 3. MENU DE NAVEGAÇÃO (Esconder as bolinhas feias do Radio Button) */
+    /* 3. MENU DE NAVEGAÇÃO (Efeito Tailwind: Hover e Item Ativo com borda azul) */
     [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
-        display: none !important; 
+        display: none !important; /* Esconde a bolinha do radio button */
     }
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
-        padding: 12px 16px !important;
-        border-radius: 8px !important;
+        padding: 10px 16px !important;
+        border-radius: 6px !important;
         margin-bottom: 4px !important;
-        background-color: transparent !important;
+        color: #94a3b8 !important; /* text-slate-400 */
+        font-weight: 500 !important;
+        font-size: 14px !important;
         transition: all 0.2s ease !important;
-        cursor: pointer !important;
+        background-color: transparent !important;
+        border-left: 4px solid transparent !important;
     }
+    /* Efeito de Hover */
     [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
-        background-color: #1E293B !important; /* Cor ao passar o rato */
+        background-color: rgba(30, 41, 59, 0.5) !important; /* hover:bg-slate-800/50 */
+        color: #f1f5f9 !important; /* hover:text-slate-100 */
+    }
+    /* Efeito de Item Selecionado (Borda Azul Tailwind) */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label[data-checked="true"] {
+        background-color: #1e293b !important; /* bg-slate-800 */
+        color: #ffffff !important;
+        border-left: 4px solid #3b82f6 !important; /* border-blue-500 */
+        border-radius: 0 6px 6px 0 !important;
     }
 
-    /* 4. CARDS DE MÉTRICAS (Brancos, sombra leve, texto escuro) */
+    /* 4. CARDS DE MÉTRICAS (Bento Grid Style) */
     [data-testid="stMetric"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
         border-radius: 8px !important;
-        padding: 16px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+        padding: 20px !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
     }
-    [data-testid="stMetricValue"] {
-        color: #0F172A !important;
-        font-size: 28px !important;
-        font-weight: 700 !important;
-    }
+    /* Título do KPI (Uppercase e Tracking Wider) */
     [data-testid="stMetricLabel"] {
-        color: #64748B !important;
-        font-size: 14px !important;
+        color: #64748b !important;
+        font-size: 11px !important;
         font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+    }
+    /* Valor do KPI */
+    [data-testid="stMetricValue"] {
+        color: #0b1c30 !important;
+        font-size: 36px !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.02em !important;
+        line-height: 44px !important;
+        margin-top: 8px !important;
     }
     
-    /* 5. Percentagens (Azul Premium) */
+    /* 5. Percentagens (Tags Tailwind) */
     [data-testid="stMetricDelta"] > div {
-        background-color: #EFF6FF !important;
-        color: #3B82F6 !important;
+        background-color: #eff6ff !important;
+        color: #2563eb !important;
         border-radius: 4px !important;
-        padding: 4px 8px !important;
+        padding: 2px 8px !important;
         font-weight: 600 !important;
+        font-size: 12px !important;
+        margin-top: 6px !important;
     }
-    [data-testid="stMetricDelta"] svg {
-        display: none !important;
-    }
+    [data-testid="stMetricDelta"] svg { display: none !important; }
 
     /* 6. Expander de Filtros */
     [data-testid="stExpander"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
         border-radius: 8px !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    /* 7. Tabelas */
+    .stDataFrame {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        background-color: #ffffff !important;
+        padding: 16px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 try:
     # -------------------------------------------------------------
-    # CÓDIGO DEFINITIVO INTACTO: LÓGICA DE DADOS NÃO FOI ALTERADA
+    # BASE MATEMÁTICA DEFINITIVA (INTOCÁVEL)
     # -------------------------------------------------------------
     df = pd.read_csv('bd-teste-sistema.csv')
     df.columns = df.columns.str.strip()
@@ -107,51 +135,58 @@ try:
     # -------------------------------------------------------------
 
     # ==========================================
-    # MENU LATERAL - NAVEGAÇÃO PRINCIPAL E ESCURA
+    # MENU LATERAL - Estilo App Tailwind
     # ==========================================
-    st.sidebar.markdown("### 🧭 Menu Principal")
+    st.sidebar.markdown("""
+        <div style="padding: 10px 0px 20px 0px; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; background-color: #2563eb; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">C</div>
+            <div>
+                <div style="color: white; font-size: 18px; font-weight: 700; font-family: 'Inter';">ConversionCRM</div>
+                <div style="color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">Enterprise Analytics</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
     
     menu_opcoes = [
-        "📊 Dashboard Comercial", 
-        "📦 Comercial por Produto", 
-        "❌ Cancelamentos / Churn",
-        "⚙️ Configurações"
+        "Dashboard de Conversão", 
+        "Comercial por Produto", 
+        "Cancelamentos / Churn",
+        "Configurações"
     ]
     
     pagina_selecionada = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
-    st.sidebar.divider()
 
     # ==========================================
     # PÁGINA 1: DASHBOARD COMERCIAL
     # ==========================================
-    if pagina_selecionada == "📊 Dashboard Comercial":
+    if pagina_selecionada == "Dashboard de Conversão":
         
-        st.title("Dashboard Comercial")
-        st.markdown("Acompanhe o funil de conversão e a eficiência da equipa.")
+        # Cabeçalho Idêntico ao HTML
+        st.markdown("""
+            <div style="margin-bottom: 24px;">
+                <h1 style="font-size: 24px; font-weight: 600; color: #0b1c30; margin-bottom: 4px; padding: 0;">Dashboard de Conversão Geral</h1>
+                <p style="font-size: 14px; color: #45464d; margin: 0;">Visão consolidada do desempenho do funil de vendas em tempo real.</p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # --- FILTROS MOVIDOS PARA DENTRO DA ABA ---
-        with st.expander("🔎 Filtros do Relatório", expanded=True):
+        # Filtros dentro do Expander
+        with st.expander("Filtros do Relatório", expanded=True):
             col_f1, col_f2, col_f3 = st.columns(3)
-            
             with col_f1:
                 data_min, data_max = df['Data de criação'].dropna().min().date(), df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período do Evento", [data_min, data_max])
-            
             with col_f2:
                 tipos = sorted(df["[IS] Tipo de lead"].dropna().unique().tolist())
                 filtro_tipo = st.multiselect("Tipo de Lead", tipos, default=tipos)
-                
                 origens = sorted(df["[IS] Origem do lead"].dropna().unique().tolist())
                 filtro_origem = st.multiselect("Origem do Lead", origens, default=origens)
-            
             with col_f3:
                 lista_sdr = sorted(df['Filtro_SDR'].unique().tolist())
                 filtro_sdr = st.multiselect("SDR Responsável", lista_sdr, default=lista_sdr)
-                
                 lista_closer = sorted(df['Filtro_Closer'].unique().tolist())
                 filtro_closer = st.multiselect("Closer Responsável", lista_closer, default=lista_closer)
 
-        # --- APLICAÇÃO DOS FILTROS ---
+        # Lógica de Filtro
         mask_atributos = (
             (df["[IS] Tipo de lead"].isin(filtro_tipo)) & 
             (df["[IS] Origem do lead"].isin(filtro_origem)) &
@@ -174,20 +209,21 @@ try:
             mask_R = df_base['Data Reuniao'].notna()
             mask_F = df_base['Etapa do negócio'].isin(['Fechado', 'Pago'])
 
-        # CÁLCULOS DO TOPO
         L, C, A, R, F = mask_L.sum(), mask_C.sum(), mask_A.sum(), mask_R.sum(), mask_F.sum()
 
-        st.write("") # Quebra de linha visual
+        st.write("") 
+        
+        # Grid de KPIs (Agora formatados com o CSS do Tailwind)
         m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Leads", L)
+        m1.metric("Leads Entrantes", L)
         m2.metric("Contato", C, f"{(C/L*100):.1f}% s/ Lead" if L>0 else "0%")
-        m3.metric("Agendado", A, f"{(A/C*100):.1f}% s/ Contato" if C>0 else "0%")
+        m3.metric("Agendado", A, f"{(A/C*100):.1f}% s/ Cont." if C>0 else "0%")
         m4.metric("Ocorrido", R, f"{(R/A*100):.1f}% s/ Agend." if A>0 else "0%")
         m5.metric("Fechado", F, f"{(F/R*100):.1f}% s/ Ocorr." if R>0 else "0%")
 
         st.divider()
 
-        # TABELAS DE ORIGEM E TIPO
+        # TABELAS
         def criar_tabela_evento(coluna_nome):
             leads_cat = df_base[mask_L].groupby(coluna_nome).size().reset_index(name='Leads')
             reunioes_cat = df_base[mask_R].groupby(coluna_nome).size().reset_index(name='Reunioes')
@@ -199,35 +235,29 @@ try:
 
         c_a, c_b = st.columns(2)
         with c_a:
-            st.markdown("#### 📍 Por Origem")
+            st.markdown("#### Por Origem")
             st.dataframe(criar_tabela_evento("[IS] Origem do lead"), use_container_width=True, hide_index=True)
         with c_b:
-            st.markdown("#### 🏷️ Por Tipo")
+            st.markdown("#### Por Tipo")
             st.dataframe(criar_tabela_evento("[IS] Tipo de lead"), use_container_width=True, hide_index=True)
 
         st.divider()
 
-        # PERFORMANCE POR SDR
-        st.markdown("#### 🏆 Performance por SDR")
+        st.markdown("#### Performance por SDR")
         sdr_l = df_base[mask_L].groupby('Filtro_SDR').size().reset_index(name='Leads')
         sdr_c = df_base[mask_C].groupby('Filtro_SDR').size().reset_index(name='Contatos')
         sdr_a = df_base[mask_A].groupby('Filtro_SDR').size().reset_index(name='Agendados')
         sdr_r = df_base[mask_R].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
-        
         df_sdr = sdr_l.merge(sdr_c, on='Filtro_SDR', how='outer').merge(sdr_a, on='Filtro_SDR', how='outer').merge(sdr_r, on='Filtro_SDR', how='outer').fillna(0)
         df_sdr = df_sdr.rename(columns={'Filtro_SDR': 'SDR Responsável'})
-        
         df_sdr['Cont/Lead (%)'] = df_sdr.apply(lambda row: f"{(row['Contatos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
         df_sdr['Agend/Cont (%)'] = df_sdr.apply(lambda row: f"{(row['Agendados']/row['Contatos']*100):.1f}%" if row['Contatos'] > 0 else "-", axis=1)
         df_sdr['Ocorr/Agend (%)'] = df_sdr.apply(lambda row: f"{(row['Ocorridos']/row['Agendados']*100):.1f}%" if row['Agendados'] > 0 else "-", axis=1)
-        
-        colunas_sdr = ['SDR Responsável', 'Leads', 'Contatos', 'Agendados', 'Ocorridos', 'Cont/Lead (%)', 'Agend/Cont (%)', 'Ocorr/Agend (%)']
-        st.dataframe(df_sdr[colunas_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+        col_sdr = ['SDR Responsável', 'Leads', 'Contatos', 'Agendados', 'Ocorridos', 'Cont/Lead (%)', 'Agend/Cont (%)', 'Ocorr/Agend (%)']
+        st.dataframe(df_sdr[col_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
-        # EFICIÊNCIA GERAL DE FECHAMENTO (SDR x CLOSER)
         st.divider()
-        st.markdown("#### 🎯 Eficiência Geral de Fechamento")
-        
+        st.markdown("#### Eficiência Geral de Fechamento")
         col_ef1, col_ef2 = st.columns(2)
         
         with col_ef1:
@@ -235,44 +265,37 @@ try:
             sdr_ef_l = df_base[mask_L].groupby('Filtro_SDR').size().reset_index(name='Leads')
             sdr_ef_r = df_base[mask_R].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
             sdr_ef_f = df_base[mask_F].groupby('Filtro_SDR').size().reset_index(name='Fechados')
-            
             ef_sdr = sdr_ef_l.merge(sdr_ef_r, on='Filtro_SDR', how='outer').merge(sdr_ef_f, on='Filtro_SDR', how='outer').fillna(0)
             ef_sdr = ef_sdr.rename(columns={'Filtro_SDR': 'SDR Responsável'})
-            
             ef_sdr['Lead x Ocorrido (%)'] = ef_sdr.apply(lambda row: f"{(row['Ocorridos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
             ef_sdr['Lead x Fechado (%)'] = ef_sdr.apply(lambda row: f"{(row['Fechados']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
-            
             col_ef_sdr = ['SDR Responsável', 'Leads', 'Ocorridos', 'Fechados', 'Lead x Ocorrido (%)', 'Lead x Fechado (%)']
             st.dataframe(ef_sdr[col_ef_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
         with col_ef2:
             st.write("**Closer: Ocorrido x Fechado**")
             mask_has_closer = df_base['Filtro_Closer'] != 'Sem Closer'
-            
             cl_ef_r = df_base[mask_R & mask_has_closer].groupby('Filtro_Closer').size().reset_index(name='Ocorridos')
             cl_ef_f = df_base[mask_F & mask_has_closer].groupby('Filtro_Closer').size().reset_index(name='Fechados')
-            
             ef_cl = cl_ef_r.merge(cl_ef_f, on='Filtro_Closer', how='outer').fillna(0)
             ef_cl = ef_cl.rename(columns={'Filtro_Closer': 'Closer Responsável'})
-            
             ef_cl['Ocorrido x Fechado (%)'] = ef_cl.apply(lambda row: f"{(row['Fechados']/row['Ocorridos']*100):.1f}%" if row['Ocorridos'] > 0 else "-", axis=1)
-            
             col_ef_cl = ['Closer Responsável', 'Ocorridos', 'Fechados', 'Ocorrido x Fechado (%)']
             st.dataframe(ef_cl[col_ef_cl].sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
 
     # ==========================================
     # PÁGINAS FUTURAS
     # ==========================================
-    elif pagina_selecionada == "📦 Comercial por Produto":
-        st.title("Comercial por Produto")
-        st.info("Espaço reservado para a visão de Produtos.")
+    elif pagina_selecionada == "Comercial por Produto":
+        st.markdown("<h1 style='color: #0b1c30;'>Comercial por Produto</h1>", unsafe_allow_html=True)
+        st.info("Módulo em desenvolvimento.")
         
-    elif pagina_selecionada == "❌ Cancelamentos / Churn":
-        st.title("Cancelamentos e Churn")
-        st.info("Espaço reservado para a visão de Cancelamentos.")
+    elif pagina_selecionada == "Cancelamentos / Churn":
+        st.markdown("<h1 style='color: #0b1c30;'>Cancelamentos e Churn</h1>", unsafe_allow_html=True)
+        st.info("Módulo em desenvolvimento.")
         
-    elif pagina_selecionada == "⚙️ Configurações":
-        st.title("Configurações")
+    elif pagina_selecionada == "Configurações":
+        st.markdown("<h1 style='color: #0b1c30;'>Configurações</h1>", unsafe_allow_html=True)
         st.info("Painel de administração.")
 
 except Exception as e:
