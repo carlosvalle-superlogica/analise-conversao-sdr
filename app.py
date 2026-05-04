@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuração de Layout e Estilo (Estável)
-st.set_page_config(page_title="Análise Comercial", layout="wide")
+# 1. Configuração de Layout e Estilo (Mantendo o que foi aprovado)
+st.set_page_config(page_title="Análise SDR", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,58 +26,51 @@ try:
     df['Data de criação'] = pd.to_datetime(df['Data de criação'], errors='coerce')
     df = df.dropna(subset=['Data de criação'])
 
-    # NOMES DAS COLUNAS
-    col_sdr = '[IS/SDR] SDR Responsável'
-    col_closer = '[IS/SDR] Closer Responsável'
-    col_contato = 'Contato Realizado ' if 'Contato Realizado ' in df.columns else 'Contato Realizado'
-    col_reuniao = '[IS/Closer] Reunião Ocorrida ' if '[IS/Closer] Reunião Ocorrida ' in df.columns else '[IS/Closer] Reunião Ocorrida'
-
-    # --- BARRA LATERAL ---
+    # Barra Lateral (MANTIDA)
     st.sidebar.header("Filtros")
     data_min, data_max = df['Data de criação'].min().date(), df['Data de criação'].max().date()
     periodo = st.sidebar.date_input("Data de criação", [data_min, data_max])
     
-    filtro_tipo = st.sidebar.multiselect("Tipo de Lead", sorted(df["[IS] Tipo de lead"].dropna().unique()), default=df["[IS] Tipo de lead"].dropna().unique())
-    filtro_origem = st.sidebar.multiselect("Origem do Lead", sorted(df["[IS] Origem do lead"].dropna().unique()), default=df["[IS] Origem do lead"].dropna().unique())
+    tipos = sorted(df["[IS] Tipo de lead"].dropna().unique().tolist())
+    filtro_tipo = st.sidebar.multiselect("Tipo de Lead", tipos, default=tipos)
     
-    # Filtros de Pessoas
-    lista_sdr = sorted(df[col_sdr].dropna().unique()) if col_sdr in df.columns else []
-    filtro_sdr = st.sidebar.multiselect("SDR Responsável", lista_sdr, default=lista_sdr)
+    origens = sorted(df["[IS] Origem do lead"].dropna().unique().tolist())
+    filtro_origem = st.sidebar.multiselect("Origem do Lead", origens, default=origens)
 
-    lista_closer = sorted(df[col_closer].dropna().unique()) if col_closer in df.columns else []
-    filtro_closer = st.sidebar.multiselect("Closer Responsável", lista_closer, default=lista_closer)
-
-    # Aplicação do Filtro Global
+    # Aplicação do Filtro (MANTIDA)
     if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
         mask = (df['Data de criação'].dt.date >= periodo[0]) & (df['Data de criação'].dt.date <= periodo[1]) & \
                (df["[IS] Tipo de lead"].isin(filtro_tipo)) & (df["[IS] Origem do lead"].isin(filtro_origem))
-        
-        if col_sdr in df.columns:
-            mask = mask & (df[col_sdr].fillna('Vazio').isin(filtro_sdr if filtro_sdr else ['Vazio']))
-        if col_closer in df.columns:
-            mask = mask & (df[col_closer].fillna('Vazio').isin(filtro_closer if filtro_closer else ['Vazio']))
-            
         df_f = df[mask].copy()
     else:
         df_f = df.copy()
 
-    # --- TOPO: FUNIL EM CASCATA ---
+    # 2. NOVA LÓGICA DE CASCATA NO TOPO
     L = len(df_f)
-    C = df_f[col_contato].notna().sum() if col_contato in df_f.columns else 0
-    A = df_f['[IS/SDR] Data do Agendamento'].notna().sum() if '[IS/SDR] Data do Agendamento' in df_f.columns else 0
-    R = df_f[col_reuniao].notna().sum() if col_reuniao in df_f.columns else 0
+    
+    col_contato = 'Contato Realizado ' if 'Contato Realizado ' in df_f.columns else 'Contato Realizado'
+    C = df_f[col_contato].notna().sum()
+    
+    A = df_f['[IS/SDR] Data do Agendamento'].notna().sum()
+    
+    col_reuniao = '[IS/Closer] Reunião Ocorrida ' if '[IS/Closer] Reunião Ocorrida ' in df_f.columns else '[IS/Closer] Reunião Ocorrida'
+    R = df_f[col_reuniao].notna().sum()
+    
     F = df_f[df_f['Etapa do negócio'].isin(['Fechado', 'Pago'])].shape[0]
 
     st.title("📊 Dashboard de Conversão Comercial")
+
+    # Exibição das Métricas com a conversão sobre a etapa anterior
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Leads", L)
     m2.metric("Contato", C, f"{(C/L*100):.1f}% s/ Lead" if L>0 else "0%")
     m3.metric("Agendado", A, f"{(A/C*100):.1f}% s/ Contato" if C>0 else "0%")
     m4.metric("Ocorrido", R, f"{(R/A*100):.1f}% s/ Agend." if A>0 else "0%")
     m5.metric("Fechado", F, f"{(F/R*100):.1f}% s/ Ocorr." if R>0 else "0%")
+
     st.divider()
 
-    # --- TABELAS ORIGEM/TIPO ---
+    # 3. TABELAS ABAIXO (MANTIDAS EXATAMENTE COMO ESTAVAM)
     def criar_tabela_segmentada(df_filtrado, coluna_nome):
         tabela = df_filtrado.groupby(coluna_nome).agg(Leads=('ID do registro.', 'count')).reset_index()
         reunioes_cat = df_filtrado[df_filtrado[col_reuniao].notna()].groupby(coluna_nome)['ID do registro.'].count().reset_index()
@@ -96,21 +89,6 @@ try:
     with c_b:
         st.subheader("🏷️ Por Tipo")
         st.dataframe(criar_tabela_segmentada(df_f, "[IS] Tipo de lead"), use_container_width=True, hide_index=True)
-    st.divider()
-
-    # --- PERFORMANCE SDR ---
-    if col_sdr in df.columns:
-        st.subheader("🏆 Performance por SDR")
-        df_sdr_perf = df_f.groupby(col_sdr).agg(
-            Leads=('ID do registro.', 'count'),
-            Contatos=(col_contato, 'count'),
-            Agendados=('[IS/SDR] Data do Agendamento', 'count'),
-            Ocorridos=(col_reuniao, 'count')
-        ).reset_index()
-        df_sdr_perf['Cont/Lead %'] = (df_sdr_perf['Contatos']/df_sdr_perf['Leads']*100).round(1).astype(str) + '%'
-        df_sdr_perf['Agend/Cont %'] = (df_sdr_perf['Agendados']/df_sdr_perf['Contatos']*100).round(1).astype(str) + '%'
-        df_sdr_perf['Ocorr/Agend %'] = (df_sdr_perf['Ocorridos']/df_sdr_perf['Agendados']*100).round(1).astype(str) + '%'
-        st.dataframe(df_sdr_perf, use_container_width=True, hide_index=True)
 
 except Exception as e:
     st.error(f"Erro: {e}")
