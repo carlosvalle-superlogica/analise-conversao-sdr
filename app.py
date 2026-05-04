@@ -22,11 +22,17 @@ st.markdown("""
 try:
     # Carregando dados
     df = pd.read_csv('bd-teste-sistema.csv')
-    df.columns = df.columns.str.strip()  # Limpa espaços em branco nos nomes das colunas
+    df.columns = df.columns.str.strip() 
     df['Data de criação'] = pd.to_datetime(df['Data de criação'], errors='coerce')
     df = df.dropna(subset=['Data de criação'])
 
-    # Barra Lateral
+    # Identificação de colunas flexíveis
+    col_sdr = '[IS/SDR] SDR Responsável'
+    col_closer = '[IS/Closer] Closer Responsável'
+    col_contato = 'Contato Realizado' if 'Contato Realizado' in df.columns else df.columns[df.columns.str.contains('Contato Realizado')].tolist()[0]
+    col_reuniao = '[IS/Closer] Reunião Ocorrida' if '[IS/Closer] Reunião Ocorrida' in df.columns else df.columns[df.columns.str.contains('Reunião Ocorrida')].tolist()[0]
+
+    # --- BARRA LATERAL (Inclusão dos novos filtros) ---
     st.sidebar.header("Filtros")
     data_min, data_max = df['Data de criação'].min().date(), df['Data de criação'].max().date()
     periodo = st.sidebar.date_input("Data de criação", [data_min, data_max])
@@ -37,19 +43,24 @@ try:
     origens = sorted(df["[IS] Origem do lead"].dropna().unique().tolist())
     filtro_origem = st.sidebar.multiselect("Origem do Lead", origens, default=origens)
 
-    # Aplicação do Filtro
+    # Novos Filtros de Pessoas
+    sdrs_lista = sorted(df[col_sdr].dropna().unique().tolist())
+    filtro_sdr = st.sidebar.multiselect("SDR Responsável", sdrs_lista, default=sdrs_lista)
+
+    closers_lista = sorted(df[col_closer].dropna().unique().tolist())
+    filtro_closer = st.sidebar.multiselect("Closer Responsável", closers_lista, default=closers_lista)
+
+    # --- APLICAÇÃO DOS FILTROS ---
     if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
-        mask = (df['Data de criação'].dt.date >= periodo[0]) & (df['Data de criação'].dt.date <= periodo[1]) & \
-               (df["[IS] Tipo de lead"].isin(filtro_tipo)) & (df["[IS] Origem do lead"].isin(filtro_origem))
+        mask = (df['Data de criação'].dt.date >= periodo[0]) & \
+               (df['Data de criação'].dt.date <= periodo[1]) & \
+               (df["[IS] Tipo de lead"].isin(filtro_tipo)) & \
+               (df["[IS] Origem do lead"].isin(filtro_origem)) & \
+               (df[col_sdr].fillna('Sem SDR').isin(filtro_sdr if filtro_sdr else ['Sem SDR'])) & \
+               (df[col_closer].fillna('Sem Closer').isin(filtro_closer if filtro_closer else ['Sem Closer']))
         df_f = df[mask].copy()
     else:
         df_f = df.copy()
-
-    # Identificação de colunas flexíveis
-    col_contato = 'Contato Realizado' if 'Contato Realizado' in df_f.columns else df_f.columns[df_f.columns.str.contains('Contato Realizado')].tolist()[0]
-    col_reuniao = '[IS/Closer] Reunião Ocorrida' if '[IS/Closer] Reunião Ocorrida' in df_f.columns else df_f.columns[df_f.columns.str.contains('Reunião Ocorrida')].tolist()[0]
-    col_sdr = '[IS/SDR] SDR Responsável'
-    col_closer = '[IS/Closer] Closer Responsável'
 
     # --- TOPO: FUNIL EM CASCATA ---
     L, C = len(df_f), df_f[col_contato].notna().sum()
@@ -87,57 +98,55 @@ try:
     st.divider()
 
     # --- PERFORMANCE SDR ---
-    if col_sdr in df_f.columns:
-        st.subheader("🏆 Performance SDR (Funil Inicial)")
-        perf_sdr = df_f.groupby(col_sdr).agg(
-            Leads=('ID do registro.', 'count'),
-            Contatos=(col_contato, 'count'),
-            Agendados=('[IS/SDR] Data do Agendamento', 'count'),
-            Ocorridos=(col_reuniao, 'count')
-        ).reset_index()
-        perf_sdr['Cont/Lead'] = (perf_sdr['Contatos']/perf_sdr['Leads']*100).round(1).astype(str) + '%'
-        perf_sdr['Agend/Cont'] = (perf_sdr['Agendados']/perf_sdr['Contatos']*100).round(1).astype(str) + '%'
-        perf_sdr['Ocorr/Agend'] = (perf_sdr['Ocorridos']/perf_sdr['Agendados']*100).round(1).astype(str) + '%'
-        st.dataframe(perf_sdr, use_container_width=True, hide_index=True)
-    else:
-        st.warning(f"Coluna {col_sdr} não encontrada para análise de SDR.")
+    st.subheader("🏆 Performance SDR (Funil Inicial)")
+    df_sdr_valid = df_f[df_f[col_sdr].notna()] # Apenas quem tem SDR
+    perf_sdr = df_sdr_valid.groupby(col_sdr).agg(
+        Leads=('ID do registro.', 'count'),
+        Contatos=(col_contato, 'count'),
+        Agendados=('[IS/SDR] Data do Agendamento', 'count'),
+        Ocorridos=(col_reuniao, 'count')
+    ).reset_index()
+    perf_sdr['Cont/Lead'] = (perf_sdr['Contatos']/perf_sdr['Leads']*100).round(1).astype(str) + '%'
+    perf_sdr['Agend/Cont'] = (perf_sdr['Agendados']/perf_sdr['Contatos']*100).round(1).astype(str) + '%'
+    perf_sdr['Ocorr/Agend'] = (perf_sdr['Ocorridos']/perf_sdr['Agendados']*100).round(1).astype(str) + '%'
+    st.dataframe(perf_sdr, use_container_width=True, hide_index=True)
 
-    # --- PERFORMANCE CLOSER ---
-    if col_closer in df_f.columns:
-        st.subheader("🤝 Performance Closer (Fechamento)")
-        df_closer_valid = df_f[df_f[col_closer].notna()]
+    # --- PERFORMANCE CLOSER (Apenas com Closer Responsável) ---
+    st.subheader("🤝 Performance Closer (Fechamento)")
+    df_closer_valid = df_f[df_f[col_closer].notna()] # REMOVE VAZIOS CONFORME SOLICITADO
+    if not df_closer_valid.empty:
         perf_closer = df_closer_valid.groupby(col_closer).agg(Ocorridos=(col_reuniao, 'count')).reset_index()
         fechados_closer = df_closer_valid[df_closer_valid['Etapa do negócio'].isin(['Fechado', 'Pago'])].groupby(col_closer)['ID do registro.'].count().reset_index()
         fechados_closer.columns = [col_closer, 'Fechados']
         perf_closer = perf_closer.merge(fechados_closer, on=col_closer, how='left').fillna(0)
         perf_closer['Fechado/Ocorrido'] = (perf_closer['Fechados']/perf_closer['Ocorridos']*100).round(1).astype(str) + '%'
         st.dataframe(perf_closer, use_container_width=True, hide_index=True)
-        
-        # --- EFICIÊNCIA FINAL ---
-        st.divider()
-        st.subheader("🎯 Eficiência de Conversão Final")
-        col_s_f, col_c_f = st.columns(2)
-        
-        with col_s_f:
-            st.write("**SDR: Impacto no Resultado Final**")
-            efic_sdr = perf_sdr.copy()
-            fech_sdr = df_f[df_f['Etapa do negócio'].isin(['Fechado', 'Pago'])].groupby(col_sdr)['ID do registro.'].count().reset_index()
-            fech_sdr.columns = [col_sdr, 'Fechados']
-            efic_sdr = efic_sdr.merge(fech_sdr, on=col_sdr, how='left').fillna(0)
-            efic_sdr['Lead x Ocorrido (%)'] = (efic_sdr['Ocorridos']/efic_sdr['Leads']*100).round(1).astype(str) + '%'
-            efic_sdr['Lead x Fechado (%)'] = (efic_sdr['Fechados']/efic_sdr['Leads']*100).round(1).astype(str) + '%'
-            st.dataframe(efic_sdr[[col_sdr, 'Leads', 'Lead x Ocorrido (%)', 'Lead x Fechado (%)']], use_container_width=True, hide_index=True)
-
-        with col_c_f:
-            st.write("**Closer: Conversão sobre o Total de Leads**")
-            efic_closer = perf_closer.copy()
-            leads_por_closer = df_f.groupby(col_closer)['ID do registro.'].count().reset_index()
-            leads_por_closer.columns = [col_closer, 'Total Leads']
-            efic_closer = efic_closer.merge(leads_por_closer, on=col_closer, how='left').fillna(0)
-            efic_closer['Lead x Fechado (%)'] = (efic_closer['Fechados']/efic_closer['Total Leads']*100).round(1).astype(str) + '%'
-            st.dataframe(efic_closer[[col_closer, 'Total Leads', 'Lead x Fechado (%)']], use_container_width=True, hide_index=True)
     else:
-        st.warning(f"Coluna {col_closer} não encontrada para análise de Closer.")
+        st.info("Nenhum Closer atribuído no período selecionado.")
+
+    # --- EFICIÊNCIA FINAL ---
+    st.divider()
+    st.subheader("🎯 Eficiência de Conversão Final")
+    col_s_f, col_c_f = st.columns(2)
+    
+    with col_s_f:
+        st.write("**SDR: Lead para Ocorrido e Fechado**")
+        efic_sdr = perf_sdr.copy()
+        fech_sdr = df_f[df_f['Etapa do negócio'].isin(['Fechado', 'Pago'])].groupby(col_sdr)['ID do registro.'].count().reset_index()
+        fech_sdr.columns = [col_sdr, 'Fechados']
+        efic_sdr = efic_sdr.merge(fech_sdr, on=col_sdr, how='left').fillna(0)
+        efic_sdr['Lead x Ocorrido (%)'] = (efic_sdr['Ocorridos']/efic_sdr['Leads']*100).round(1).astype(str) + '%'
+        efic_sdr['Lead x Fechado (%)'] = (efic_sdr['Fechados']/efic_sdr['Leads']*100).round(1).astype(str) + '%'
+        st.dataframe(efic_sdr[[col_sdr, 'Leads', 'Lead x Ocorrido (%)', 'Lead x Fechado (%)']], use_container_width=True, hide_index=True)
+
+    with col_c_f:
+        st.write("**Closer: Lead para Fechado**")
+        if not df_closer_valid.empty:
+            leads_por_closer = df_closer_valid.groupby(col_closer)['ID do registro.'].count().reset_index()
+            leads_por_closer.columns = [col_closer, 'Leads Atribuídos']
+            efic_closer = perf_closer.merge(leads_por_closer, on=col_closer, how='left').fillna(0)
+            efic_closer['Lead x Fechado (%)'] = (efic_closer['Fechados']/efic_closer['Leads Atribuídos']*100).round(1).astype(str) + '%'
+            st.dataframe(efic_closer[[col_closer, 'Leads Atribuídos', 'Lead x Fechado (%)']], use_container_width=True, hide_index=True)
 
 except Exception as e:
-    st.error(f"Ocorreu um erro inesperado: {e}")
+    st.error(f"Erro: {e}")
