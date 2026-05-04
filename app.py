@@ -75,7 +75,7 @@ try:
     )
     df_base = df[mask_atributos].copy()
 
-    # Aplicação do Filtro TEMPORAL (Igual ao HubSpot: Conta o evento dentro do mês)
+    # Aplicação do Filtro TEMPORAL (Lógica de Evento do HubSpot)
     if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
         p_start, p_end = periodo[0], periodo[1]
         
@@ -85,7 +85,6 @@ try:
         mask_R = (df_base['Data Reuniao'].dt.date >= p_start) & (df_base['Data Reuniao'].dt.date <= p_end)
         mask_F = (df_base['Data Fechamento'].dt.date >= p_start) & (df_base['Data Fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
     else:
-        # Fallback de segurança se nenhuma data for selecionada
         mask_L = df_base['Data de criação'].notna()
         mask_C = df_base['Data Contato'].notna()
         mask_A = df_base['Data Agendamento'].notna()
@@ -93,11 +92,7 @@ try:
         mask_F = df_base['Etapa do negócio'].isin(['Fechado', 'Pago'])
 
     # CÁLCULOS DO TOPO
-    L = mask_L.sum()
-    C = mask_C.sum()
-    A = mask_A.sum()
-    R = mask_R.sum()
-    F = mask_F.sum()
+    L, C, A, R, F = mask_L.sum(), mask_C.sum(), mask_A.sum(), mask_R.sum(), mask_F.sum()
 
     st.title("📊 Dashboard de Conversão Comercial")
 
@@ -133,28 +128,32 @@ try:
 
     st.divider()
 
-    # ---> NOVA ADIÇÃO: PERFORMANCE POR SDR
+    # ---> PERFORMANCE POR SDR (ORDEM DAS COLUNAS AJUSTADA)
     st.subheader("🏆 Performance por SDR")
     
-    # Contamos cada evento agrupando pelo SDR
     sdr_l = df_base[mask_L].groupby('Filtro_SDR').size().reset_index(name='Leads')
     sdr_c = df_base[mask_C].groupby('Filtro_SDR').size().reset_index(name='Contatos')
     sdr_a = df_base[mask_A].groupby('Filtro_SDR').size().reset_index(name='Agendados')
     sdr_r = df_base[mask_R].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
     
-    # Unimos as colunas para formar a tabela completa do SDR
     df_sdr = sdr_l.merge(sdr_c, on='Filtro_SDR', how='outer') \
                   .merge(sdr_a, on='Filtro_SDR', how='outer') \
                   .merge(sdr_r, on='Filtro_SDR', how='outer').fillna(0)
                   
     df_sdr = df_sdr.rename(columns={'Filtro_SDR': 'SDR Responsável'})
     
-    # Calculamos as conversões em cascata com proteção matemática
+    # Cálculos de porcentagem
     df_sdr['Cont/Lead (%)'] = df_sdr.apply(lambda row: f"{(row['Contatos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
     df_sdr['Agend/Cont (%)'] = df_sdr.apply(lambda row: f"{(row['Agendados']/row['Contatos']*100):.1f}%" if row['Contatos'] > 0 else "-", axis=1)
     df_sdr['Ocorr/Agend (%)'] = df_sdr.apply(lambda row: f"{(row['Ocorridos']/row['Agendados']*100):.1f}%" if row['Agendados'] > 0 else "-", axis=1)
     
-    colunas_finais_sdr = ['SDR Responsável', 'Leads', 'Contatos', 'Cont/Lead (%)', 'Agendados', 'Agend/Cont (%)', 'Ocorridos', 'Ocorr/Agend (%)']
+    # REORDENAÇÃO SOLICITADA: Quantidades antes dos %
+    colunas_finais_sdr = [
+        'SDR Responsável', 
+        'Leads', 'Contatos', 'Agendados', 'Ocorridos', # Quantidades
+        'Cont/Lead (%)', 'Agend/Cont (%)', 'Ocorr/Agend (%)' # Porcentagens
+    ]
+    
     st.dataframe(df_sdr[colunas_finais_sdr].sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
 except Exception as e:
