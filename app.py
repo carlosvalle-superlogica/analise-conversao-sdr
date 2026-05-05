@@ -9,42 +9,60 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
     .stApp { background-color: #ffffff !important; }
+    
+    /* Cores das métricas e títulos em Azul */
     [data-testid="stMetricLabel"] { color: #1565C0 !important; font-weight: 700 !important; text-transform: uppercase; }
     h1, h2, h3 { color: #1565C0 !important; }
-    [data-testid="stMetric"] { background-color: #f8f9fa !important; border: 1px solid #e6e9ef !important; border-radius: 10px !important; padding: 15px !important; }
+    
+    /* Estilização dos Cards */
+    [data-testid="stMetric"] { 
+        background-color: #f8f9fa !important; 
+        border: 1px solid #e6e9ef !important; 
+        border-radius: 10px !important; 
+        padding: 15px !important; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SISTEMA DE LOGIN ---
+# --- SISTEMA DE LOGIN COM AS SUAS CREDENCIAIS ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
     st.session_state['perfil'] = None
 
 def login():
-    st.title("🔐 Acesso ao Sistema de Marketing")
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if usuario == "admin" and senha == "admin123":
-            st.session_state['autenticado'] = True
-            st.session_state['perfil'] = "admin"
-            st.rerun()
-        elif usuario == "mkt" and senha == "mkt123":
-            st.session_state['autenticado'] = True
-            st.session_state['perfil'] = "operador"
-            st.rerun()
-        else:
-            st.error("Usuário ou senha incorretos")
+    # Centralizando o formulário de login visualmente
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.write("")
+        st.write("")
+        st.title("🔐 Acesso Restrito")
+        usuario = st.text_input("Login")
+        senha = st.text_input("Senha", type="password")
+        
+        if st.button("Entrar no Sistema"):
+            # Credenciais Admin
+            if usuario == "aquisições" and senha == "1987":
+                st.session_state['autenticado'] = True
+                st.session_state['perfil'] = "admin"
+                st.rerun()
+            # Credenciais Marketing
+            elif usuario == "mkt" and senha == "123":
+                st.session_state['autenticado'] = True
+                st.session_state['perfil'] = "operador"
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos. Tente novamente.")
 
 if not st.session_state['autenticado']:
     login()
 else:
-    if st.sidebar.button("Sair / Logout"):
+    # Botão de Logout discreto na lateral
+    if st.sidebar.button("Encerrar Sessão"):
         st.session_state['autenticado'] = False
         st.rerun()
 
     try:
-        # CARREGAMENTO E TRATAMENTO
+        # CARREGAMENTO E TRATAMENTO (Mesmo motor validado)
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
@@ -57,7 +75,7 @@ else:
         df['Data Fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
 
         # FILTROS
-        st.sidebar.header(f"Perfil: {st.session_state['perfil'].upper()}")
+        st.sidebar.header(f"Acesso: {st.session_state['perfil'].upper()}")
         data_min, data_max = df['Data de criação'].dropna().min().date(), df['Data de criação'].dropna().max().date()
         periodo = st.sidebar.date_input("Período de Análise", [data_min, data_max])
 
@@ -69,7 +87,7 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             
-            # Máscaras Período
+            # Máscaras do Período
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
             mC = (df_base['Data Contato'].dt.date >= p_start) & (df_base['Data Contato'].dt.date <= p_end)
             mA = (df_base['Data Agendamento'].dt.date >= p_start) & (df_base['Data Agendamento'].dt.date <= p_end)
@@ -79,19 +97,21 @@ else:
             L, C, A, R, F = mL.sum(), mC.sum(), mA.sum(), mR.sum(), mF.sum()
 
             st.title("📊 Funil de Marketing B2B")
+            st.markdown("---")
 
-            # 1. VISÃO DO PERÍODO (Sempre Visível)
+            # 1. VISÃO DO PERÍODO
             st.subheader(f"📅 Resultados do Período")
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Leads", f"{L}")
-            c2.metric("Contatos", f"{C}", f"{(C/L*100):.1f}%" if L>0 else "0%")
-            c3.metric("Agendados", f"{A}", f"{(A/C*100):.1f}%" if C>0 else "0%")
-            c4.metric("Reuniões", f"{R}", f"{(R/A*100):.1f}%" if A>0 else "0%")
-            c5.metric("Fechados", f"{F}", f"{(F/R*100):.1f}%" if R>0 else "0%")
+            c2.metric("Contatos", f"{C}", f"{(C/L*100):.1f}% Contato" if L>0 else "0%")
+            c3.metric("Agendados", f"{A}", f"{(A/C*100):.1f}% Agendado" if C>0 else "0%")
+            c4.metric("Reuniões", f"{R}", f"{(R/A*100):.1f}% Ocorrido" if A>0 else "0%")
+            c5.metric("Fechados", f"{F}", f"{(F/R*100):.1f}% Fechado" if R>0 else "0%")
 
-            st.divider()
+            st.write("")
+            st.write("")
 
-            # 2. PERFORMANCE POR CANAL (Sempre Visível)
+            # 2. PERFORMANCE POR CANAL
             st.subheader("📍 Performance por Canal (Origem)")
             leads_origem = df_base[mL].groupby("[IS] Origem do lead").size().reset_index(name='Leads')
             fechados_origem = df_base[mF].groupby("[IS] Origem do lead").size().reset_index(name='Vendas')
@@ -113,3 +133,4 @@ else:
 
     except Exception as e:
         st.error(f"Erro ao carregar dados: {e}")
+        
