@@ -264,36 +264,47 @@ else:
             elif pagina_selecionada == "📦 Visão de Produtos":
                 st.title("📦 Visão de Produtos - Aquisições")
                 
-                # Base de cálculo cravada nas reuniões ocorridas
                 total_reunioes = mR.sum()
-                
-                st.subheader("🎯 Conversão por Produto Fechado")
-                st.info(f"O cálculo de conversão abaixo é baseado no total de **{total_reunioes} Reuniões Ocorridas** no período selecionado.")
-                
                 col_prod = '[IS/Closer] Produtos Fechados'
                 
                 if col_prod in df_base.columns:
                     # Filtra os negócios ganhos no período e pega a coluna de produtos
                     df_vendas = df_base[mF][col_prod].dropna()
                     
-                    # O HubSpot costuma exportar campos multi-select separados por ponto e vírgula
-                    # Esse tratamento explode esses valores para que cada produto conte individualmente
+                    # Explode os produtos separados por ponto e vírgula
                     produtos_separados = df_vendas.str.split(';').explode().str.strip()
-                    
-                    # Conta a quantidade de cada produto vendido
                     contagem_prod = produtos_separados.value_counts().reset_index()
                     contagem_prod.columns = ['Produto', 'Quantidade Vendida']
                     
-                    # Calcula a conversão em relação ao total de reuniões
+                    # Cálculos Totais
+                    total_produtos_vendidos = contagem_prod['Quantidade Vendida'].sum()
+                    conversao_geral = (total_produtos_vendidos / total_reunioes * 100) if total_reunioes > 0 else 0
+                    
+                    # CARDS DE MÉTRICAS (VISÃO TOPO)
+                    st.subheader("🎯 Resumo do Período")
+                    cp1, cp2, cp3, _ = st.columns([1, 1, 1, 1]) # Adicionado um espaço extra para os cards não ficarem gigantes
+                    cp1.metric("Reuniões Ocorridas", f"{total_reunioes}")
+                    cp2.metric("Produtos Vendidos", f"{total_produtos_vendidos}")
+                    cp3.metric("Conversão Geral", f"{conversao_geral:.1f}%")
+                    
+                    st.divider()
+
+                    # Calcula a conversão em relação ao total de reuniões ocorridas
                     contagem_prod['Conversão (vs Ocorridas)'] = contagem_prod['Quantidade Vendida'].apply(
                         lambda x: f"{(x / total_reunioes * 100):.1f}%" if total_reunioes > 0 else "0.0%"
                     )
                     
-                    st.dataframe(
-                        contagem_prod.sort_values(by='Quantidade Vendida', ascending=False),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    st.subheader("📊 Conversão por Produto Fechado")
+                    
+                    # ENQUADRAMENTO DA TABELA (Restringe a largura a 60% para não esgarçar os dados)
+                    col_tabela, col_vazia = st.columns([6, 4])
+                    
+                    with col_tabela:
+                        st.dataframe(
+                            contagem_prod.sort_values(by='Quantidade Vendida', ascending=False),
+                            use_container_width=True,
+                            hide_index=True
+                        )
                 else:
                     st.warning(f"A coluna '{col_prod}' não foi encontrada na base de dados.")
 
