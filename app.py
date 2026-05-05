@@ -53,11 +53,11 @@ def login():
         u = st.text_input("Login")
         s = st.text_input("Senha", type="password")
         if st.button("Acessar Sistema"):
-            # ACESSO MASTER: aquisições / 1987
+            # ACESSO MASTER
             if u == "aquisições" and s == "1987":
                 st.session_state.update({'autenticado': True, 'perfil': 'master'})
                 st.rerun()
-            # ACESSO MARKETING: mkt / 123
+            # ACESSO MARKETING
             elif u == "mkt" and s == "123":
                 st.session_state.update({'autenticado': True, 'perfil': 'operador'})
                 st.rerun()
@@ -72,20 +72,20 @@ else:
         # LÓGICA BLINDADA - MAPEAMENTO E TRATAMENTO DE COLUNAS HUBSPOT
         # ==============================================================================
         df = pd.read_csv('bd-teste-sistema.csv')
-        df.columns = df.columns.str.strip() # Limpeza de espaços invisíveis
+        df.columns = df.columns.str.strip()
 
-        # Datas Críticas (Nomes exatos conforme auditoria do CSV)
+        # Datas Críticas
         df['Data de criação'] = pd.to_datetime(df['Data de criação'], errors='coerce')
         df['Contato Realizado'] = pd.to_datetime(df['Contato Realizado'], errors='coerce')
         df['[IS/SDR] Data do Agendamento'] = pd.to_datetime(df['[IS/SDR] Data do Agendamento'], errors='coerce')
         df['[IS/Closer] Reunião Ocorrida'] = pd.to_datetime(df['[IS/Closer] Reunião Ocorrida'], errors='coerce')
         df['Data de fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
 
-        # Nomes de Equipe e Atributos
+        # Equipe
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
 
-        # --- BARRA LATERAL (NAVEGAÇÃO) ---
+        # --- NAVEGAÇÃO LATERAL ---
         st.sidebar.markdown(f"<h3 style='color: #1565C0;'>Perfil: {st.session_state['perfil'].upper()}</h3>", unsafe_allow_html=True)
         st.sidebar.divider()
         menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
@@ -97,12 +97,12 @@ else:
             st.rerun()
 
         # ==============================================================================
-        # LÓGICA BLINDADA - DASHBOARD GERAL (AQUISIÇÕES B2B)
+        # LÓGICA BLINDADA - DASHBOARD GERAL
         # ==============================================================================
         if pagina_selecionada == "📊 Dashboard Geral":
             st.title("📊 Dashboard Comercial")
             
-            # FILTROS NO TOPO (ESQUERDA: ATRIBUTOS | DIREITA: EQUIPE)
+            # FILTROS
             with st.expander("🔍 FILTROS DO RELATÓRIO", expanded=True):
                 col_esq, col_dir = st.columns(2)
                 with col_esq:
@@ -121,7 +121,6 @@ else:
                         lista_closers = sorted(df['Filtro_Closer'].unique().tolist())
                         closers_sel = st.multiselect("Closer Responsável", lista_closers, default=lista_closers)
                     else:
-                        # BLINDAGEM MKT: Carrega tudo internamente mas esconde os filtros
                         sdrs_sel = df['Filtro_SDR'].unique().tolist()
                         closers_sel = df['Filtro_Closer'].unique().tolist()
 
@@ -157,14 +156,13 @@ else:
             st.divider()
 
             # ==============================================================================
-            # LÓGICA BLINDADA - TABELAS DE APOIO (CONVERSÕES LEAD -> FINAL)
+            # LÓGICA BLINDADA - TABELAS DE APOIO
             # ==============================================================================
             def criar_tabela_mkt(coluna_nome):
                 l_cat = df_base[mL].groupby(coluna_nome).size().reset_index(name='Leads')
                 r_cat = df_base[mR].groupby(coluna_nome).size().reset_index(name='Ocorridos')
                 f_cat = df_base[mF].groupby(coluna_nome).size().reset_index(name='Fechados')
                 t = l_cat.merge(r_cat, on=coluna_nome, how='outer').merge(f_cat, on=coluna_nome, how='outer').fillna(0)
-                # Métricas de Qualidade Marketing
                 t['L x Ocorrido (%)'] = t.apply(lambda row: f"{(row['Ocorridos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "0%", axis=1)
                 t['L x Fechado (%)'] = t.apply(lambda row: f"{(row['Fechados']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "0%", axis=1)
                 return t.sort_values(by='Leads', ascending=False)
@@ -196,25 +194,50 @@ else:
                 cy5.metric("Fechado (Ano)", f"{Fy}", f"{(Fy/Ry*100):.1f}%" if Ry>0 else "0%")
 
                 # ==============================================================================
-                # LÓGICA BLINDADA - PERFORMANCE TIME (SDR E CLOSER)
+                # LÓGICA BLINDADA - PERFORMANCE TIME (SDR E CLOSER) COM NOVO LAYOUT
                 # ==============================================================================
                 st.divider()
-                st.subheader("🏆 Performance SDR (Período)")
+                
+                # 1. FUNIL COMPLETO DE SDR
+                st.subheader("🏆 Performance SDR: Funil de Conversão (Período)")
                 s_l = df_base[mL].groupby('Filtro_SDR').size().reset_index(name='Leads')
+                s_c = df_base[mC].groupby('Filtro_SDR').size().reset_index(name='Contatos')
+                s_a = df_base[mA].groupby('Filtro_SDR').size().reset_index(name='Agendados')
                 s_r = df_base[mR].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
                 s_f = df_base[mF].groupby('Filtro_SDR').size().reset_index(name='Fechados')
-                t_sdr = s_l.merge(s_r, on='Filtro_SDR', how='outer').merge(s_f, on='Filtro_SDR', how='outer').fillna(0)
-                t_sdr['L x Ocorrido %'] = t_sdr.apply(lambda r: f"{(r['Ocorridos']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
-                t_sdr['L x Fechado %'] = t_sdr.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
-                st.dataframe(t_sdr.sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+                
+                t_sdr_funil = s_l.merge(s_c, on='Filtro_SDR', how='outer').merge(s_a, on='Filtro_SDR', how='outer').merge(s_r, on='Filtro_SDR', how='outer').merge(s_f, on='Filtro_SDR', how='outer').fillna(0)
+                
+                # Conversões etapa por etapa
+                t_sdr_funil['C/L (%)'] = t_sdr_funil.apply(lambda r: f"{(r['Contatos']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
+                t_sdr_funil['A/C (%)'] = t_sdr_funil.apply(lambda r: f"{(r['Agendados']/r['Contatos']*100):.1f}%" if r['Contatos']>0 else "0%", axis=1)
+                t_sdr_funil['O/A (%)'] = t_sdr_funil.apply(lambda r: f"{(r['Ocorridos']/r['Agendados']*100):.1f}%" if r['Agendados']>0 else "0%", axis=1)
+                t_sdr_funil['F/O (%)'] = t_sdr_funil.apply(lambda r: f"{(r['Fechados']/r['Ocorridos']*100):.1f}%" if r['Ocorridos']>0 else "0%", axis=1)
+                
+                t_sdr_funil = t_sdr_funil.rename(columns={'Filtro_SDR': 'SDR Responsável'})
+                st.dataframe(t_sdr_funil.sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
                 st.write("")
-                st.subheader("🎯 Eficiência Closer (Período)")
-                cl_r = df_base[mR & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Ocorridos')
-                cl_f = df_base[mF & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Fechados')
-                t_cl = cl_r.merge(cl_f, on='Filtro_Closer', how='outer').fillna(0)
-                t_cl['Ocorrido x Fechado %'] = t_cl.apply(lambda r: f"{(r['Fechados']/r['Ocorridos']*100):.1f}%" if r['Ocorridos']>0 else "0%", axis=1)
-                st.dataframe(t_cl.sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
+                
+                # 2. TABELAS DE EFICIÊNCIA LADO A LADO
+                col_ef1, col_ef2 = st.columns(2)
+                
+                with col_ef1:
+                    st.subheader("🎯 Eficiência SDR (Qualidade)")
+                    t_sdr_q = t_sdr_funil[['SDR Responsável', 'Leads', 'Ocorridos', 'Fechados']].copy()
+                    t_sdr_q['L x Ocorrido %'] = t_sdr_q.apply(lambda r: f"{(r['Ocorridos']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
+                    t_sdr_q['L x Fechado %'] = t_sdr_q.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
+                    st.dataframe(t_sdr_q.sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+
+                with col_ef2:
+                    st.subheader("🎯 Eficiência Closer (Período)")
+                    cl_r = df_base[mR & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Ocorridos')
+                    cl_f = df_base[mF & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Fechados')
+                    t_cl = cl_r.merge(cl_f, on='Filtro_Closer', how='outer').fillna(0)
+                    t_cl['Ocorrido x Fechado %'] = t_cl.apply(lambda r: f"{(r['Fechados']/r['Ocorridos']*100):.1f}%" if r['Ocorridos']>0 else "0%", axis=1)
+                    
+                    t_cl = t_cl.rename(columns={'Filtro_Closer': 'Closer Responsável'})
+                    st.dataframe(t_cl.sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
 
         else:
             st.title(pagina_selecionada)
