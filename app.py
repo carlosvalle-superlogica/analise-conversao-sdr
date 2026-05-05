@@ -280,14 +280,14 @@ else:
                     
                     # Contagem dos produtos
                     contagem_prod = produtos_separados.value_counts().reset_index()
-                    contagem_prod.columns = ['Produto', 'Quantidade Vendida']
-                    total_produtos = contagem_prod['Quantidade Vendida'].sum()
+                    contagem_prod.columns = ['Produto', 'Qtd. Vendida']
+                    total_produtos = contagem_prod['Qtd. Vendida'].sum()
                     
                     # Cálculo das conversões gerais
                     conv_cliente = (total_clientes / total_reunioes * 100) if total_reunioes > 0 else 0.0
                     conv_produto = (total_produtos / total_reunioes * 100) if total_reunioes > 0 else 0.0
                     
-                    # CARDS DE MÉTRICAS (NOVO LAYOUT DE 5 COLUNAS)
+                    # CARDS DE MÉTRICAS (VISÃO TOPO)
                     st.subheader("🎯 Resumo de Conversão (Período)")
                     cp1, cp2, cp3, cp4, cp5 = st.columns(5)
                     cp1.metric("Reuniões Ocorridas", f"{total_reunioes}")
@@ -299,22 +299,32 @@ else:
                     st.divider()
 
                     # TABELA DETALHADA
-                    st.subheader("📊 Conversão por Produto Fechado")
-                    st.info(f"O cálculo da tabela utiliza o total de **{total_reunioes} Reuniões Ocorridas** como base para a porcentagem de conversão.")
+                    st.subheader("📊 Performance por Produto Fechado")
+                    st.info(f"A tabela exibe a relevância de cada produto no faturamento total (**% do Mix**) e a eficácia de venda por reunião (**Conversão vs Reuniões**).")
                     
-                    contagem_prod['Conversão (vs Ocorridas)'] = contagem_prod['Quantidade Vendida'].apply(
+                    # Coluna 1: O quanto esse produto representa de todos os produtos vendidos
+                    contagem_prod['% do Mix (Total Vendido)'] = contagem_prod['Qtd. Vendida'].apply(
+                        lambda x: f"{(x / total_produtos * 100):.1f}%" if total_produtos > 0 else "0.0%"
+                    )
+                    
+                    # Coluna 2: A conversão real baseada nas reuniões ocorridas
+                    contagem_prod['Conversão (vs Reuniões)'] = contagem_prod['Qtd. Vendida'].apply(
                         lambda x: f"{(x / total_reunioes * 100):.1f}%" if total_reunioes > 0 else "0.0%"
                     )
                     
-                    # ENQUADRAMENTO DA TABELA (Largura controlada: 60% tabela / 40% vazio)
-                    col_tabela, col_vazia = st.columns([6, 4])
+                    # ENQUADRAMENTO DA TABELA (Largura controlada: 70% tabela / 30% vazio para melhor leitura)
+                    col_tabela, col_vazia = st.columns([7, 3])
                     
                     with col_tabela:
                         st.dataframe(
-                            contagem_prod.sort_values(by='Quantidade Vendida', ascending=False),
+                            contagem_prod[['Produto', 'Qtd. Vendida', '% do Mix (Total Vendido)', 'Conversão (vs Reuniões)']].sort_values(by='Qtd. Vendida', ascending=False),
                             use_container_width=True,
                             hide_index=True
                         )
+                    
+                    # ESPAÇAMENTO INFERIOR (Para permitir rolagem suave sem espremer a tela)
+                    st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
+                    
                 else:
                     st.warning(f"A coluna '{col_prod}' não foi encontrada na base de dados.")
 
