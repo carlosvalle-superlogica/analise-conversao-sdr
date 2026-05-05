@@ -264,39 +264,49 @@ else:
             elif pagina_selecionada == "📦 Visão de Produtos":
                 st.title("📦 Visão de Produtos - Aquisições")
                 
+                # Base de cálculo de denominadores e numeradores gerais
                 total_reunioes = mR.sum()
+                total_clientes = mF.sum()
+                
                 col_prod = '[IS/Closer] Produtos Fechados'
                 
                 if col_prod in df_base.columns:
-                    # Filtra os negócios ganhos no período e pega a coluna de produtos
+                    # Filtra os negócios ganhos no período
                     df_vendas = df_base[mF][col_prod].dropna()
                     
-                    # Explode os produtos separados por ponto e vírgula
+                    # Explode os produtos separados por ponto e vírgula e remove espaços/vazios
                     produtos_separados = df_vendas.str.split(';').explode().str.strip()
+                    produtos_separados = produtos_separados[produtos_separados != ""]
+                    
+                    # Contagem dos produtos
                     contagem_prod = produtos_separados.value_counts().reset_index()
                     contagem_prod.columns = ['Produto', 'Quantidade Vendida']
+                    total_produtos = contagem_prod['Quantidade Vendida'].sum()
                     
-                    # Cálculos Totais
-                    total_produtos_vendidos = contagem_prod['Quantidade Vendida'].sum()
-                    conversao_geral = (total_produtos_vendidos / total_reunioes * 100) if total_reunioes > 0 else 0
+                    # Cálculo das conversões gerais
+                    conv_cliente = (total_clientes / total_reunioes * 100) if total_reunioes > 0 else 0.0
+                    conv_produto = (total_produtos / total_reunioes * 100) if total_reunioes > 0 else 0.0
                     
-                    # CARDS DE MÉTRICAS (VISÃO TOPO)
-                    st.subheader("🎯 Resumo do Período")
-                    cp1, cp2, cp3, _ = st.columns([1, 1, 1, 1]) # Adicionado um espaço extra para os cards não ficarem gigantes
+                    # CARDS DE MÉTRICAS (NOVO LAYOUT DE 5 COLUNAS)
+                    st.subheader("🎯 Resumo de Conversão (Período)")
+                    cp1, cp2, cp3, cp4, cp5 = st.columns(5)
                     cp1.metric("Reuniões Ocorridas", f"{total_reunioes}")
-                    cp2.metric("Produtos Vendidos", f"{total_produtos_vendidos}")
-                    cp3.metric("Conversão Geral", f"{conversao_geral:.1f}%")
+                    cp2.metric("Clientes Fechados", f"{total_clientes}")
+                    cp3.metric("Produtos Vendidos", f"{total_produtos}")
+                    cp4.metric("Conv. Cliente", f"{conv_cliente:.1f}%")
+                    cp5.metric("Conv. Produto", f"{conv_produto:.1f}%")
                     
                     st.divider()
 
-                    # Calcula a conversão em relação ao total de reuniões ocorridas
+                    # TABELA DETALHADA
+                    st.subheader("📊 Conversão por Produto Fechado")
+                    st.info(f"O cálculo da tabela utiliza o total de **{total_reunioes} Reuniões Ocorridas** como base para a porcentagem de conversão.")
+                    
                     contagem_prod['Conversão (vs Ocorridas)'] = contagem_prod['Quantidade Vendida'].apply(
                         lambda x: f"{(x / total_reunioes * 100):.1f}%" if total_reunioes > 0 else "0.0%"
                     )
                     
-                    st.subheader("📊 Conversão por Produto Fechado")
-                    
-                    # ENQUADRAMENTO DA TABELA (Restringe a largura a 60% para não esgarçar os dados)
+                    # ENQUADRAMENTO DA TABELA (Largura controlada: 60% tabela / 40% vazio)
                     col_tabela, col_vazia = st.columns([6, 4])
                     
                     with col_tabela:
@@ -319,7 +329,7 @@ else:
         # LÓGICA BLINDADA - CANAIS (PREPARADO PARA NOVO CSV)
         # ==============================================================================
         elif pipeline_selecionado == "Canais":
-            st.title(f"📊 Dashboard Comercial - Canais")
+            st.title("📊 Dashboard Comercial - Canais")
             st.warning("Aguardando importação do arquivo 'bd-canais.csv' para processamento de dados específicos desta unidade.")
 
     except Exception as e:
