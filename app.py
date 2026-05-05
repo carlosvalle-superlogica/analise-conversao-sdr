@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
 
-# 1. CONFIGURAÇÃO DE LAYOUT E ESTILO
+# 1. CONFIGURAÇÃO DE LAYOUT E ESTILO (Contraste Máximo Azul/Branco)
 st.set_page_config(page_title="Sistema de Gestão Comercial", layout="wide")
 
 st.markdown("""
     <style>
     .stApp { background-color: #F0F8FF; }
     
-    /* ===== CARDS DE MÉTRICAS ===== */
+    /* CARDS DE MÉTRICAS */
     div[data-testid="stMetricValue"] {
         background-color: #FFFFFF; border-radius: 10px; padding: 10px; border: 1px solid #90CAF9; color: #0D47A1;
     }
@@ -18,33 +18,30 @@ st.markdown("""
     [data-testid="stMetricDelta"] svg { display: none; }
     h1, h2, h3, h4 { color: #1565C0 !important; font-weight: 700 !important; }
     
-    /* ===== CAIXA DE FILTROS (EXPANDER) ===== */
+    /* CAIXA DE FILTROS (EXPANDER) */
     [data-testid="stExpander"] {
         background-color: #FFFFFF !important;
-        border: 2px solid #90CAF9 !important; /* Borda azul clara para destacar a caixa */
+        border: 2px solid #1565C0 !important;
         border-radius: 8px !important;
     }
     
-    /* Títulos acima dos filtros (Ex: "Tipo de Lead", "SDR Responsável") */
+    /* Títulos dos Filtros */
     div[data-testid="stMultiSelect"] label p, 
     div[data-testid="stDateInput"] label p {
-        color: #0D47A1 !important; /* Azul Escuro e Forte */
+        color: #0D47A1 !important;
         font-weight: 800 !important;
         font-size: 15px !important;
     }
     
-    /* Tags selecionadas (os chips com os nomes) */
+    /* Tags Selecionadas (Contraste Azul/Branco) */
     span[data-baseweb="tag"] {
-        background-color: #1565C0 !important; /* Fundo Azul */
+        background-color: #1565C0 !important;
     }
     span[data-baseweb="tag"] span {
-        color: #FFFFFF !important; /* Texto Branco para máximo contraste */
+        color: #FFFFFF !important;
         font-weight: 600 !important;
     }
-    /* Ícone do "X" na tag */
-    span[data-baseweb="tag"] svg {
-        fill: #FFFFFF !important; 
-    }
+    span[data-baseweb="tag"] svg { fill: #FFFFFF !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -56,46 +53,40 @@ if 'autenticado' not in st.session_state:
 def login():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.write("")
-        st.write("")
         st.title("🔐 Login de Acesso")
         u = st.text_input("Login")
         s = st.text_input("Senha", type="password")
         if st.button("Acessar Sistema"):
-            # LOGIN MASTER
             if u == "aquisições" and s == "1987":
                 st.session_state.update({'autenticado': True, 'perfil': 'master'})
                 st.rerun()
-            # LOGIN MKT
             elif u == "mkt" and s == "123":
                 st.session_state.update({'autenticado': True, 'perfil': 'operador'})
                 st.rerun()
             else:
-                st.error("Dados de acesso incorretos.")
+                st.error("Usuário ou senha incorretos.")
 
 if not st.session_state['autenticado']:
     login()
 else:
     try:
-        # CARREGAMENTO E TRATAMENTO DE DADOS
+        # 2. CARREGAMENTO E TRATAMENTO DE DADOS (Auditado para bater com HubSpot 2026)
         df = pd.read_csv('bd-teste-sistema.csv')
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.str.strip() # Remove espaços como "Contato Realizado "
 
+        # Conversão de Datas (Nomes das colunas exatamente como no seu CSV)
         df['Data de criação'] = pd.to_datetime(df['Data de criação'], errors='coerce')
-        col_cont = 'Contato Realizado' if 'Contato Realizado' in df.columns else df.columns[df.columns.str.contains('Contato Realizado')].tolist()[0]
-        df['Data Contato'] = pd.to_datetime(df[col_cont], errors='coerce')
-        df['Data Agendamento'] = pd.to_datetime(df['[IS/SDR] Data do Agendamento'], errors='coerce')
-        col_reun = '[IS/Closer] Reunião Ocorrida' if '[IS/Closer] Reunião Ocorrida' in df.columns else df.columns[df.columns.str.contains('Reunião Ocorrida')].tolist()[0]
-        df['Data Reuniao'] = pd.to_datetime(df[col_reun], errors='coerce')
-        df['Data Fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
+        df['Contato Realizado'] = pd.to_datetime(df['Contato Realizado'], errors='coerce')
+        df['[IS/SDR] Data do Agendamento'] = pd.to_datetime(df['[IS/SDR] Data do Agendamento'], errors='coerce')
+        df['[IS/Closer] Reunião Ocorrida'] = pd.to_datetime(df['[IS/Closer] Reunião Ocorrida'], errors='coerce')
+        df['Data de fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
 
+        # Tratamento de Equipe para evitar sumiço de dados por NaNs
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
 
-        # --- NAVEGAÇÃO LATERAL (EXCLUSIVA PARA MENU) ---
+        # --- MENU LATERAL (Navegação Pura) ---
         st.sidebar.markdown(f"<h3 style='color: #1565C0;'>Perfil: {st.session_state['perfil'].upper()}</h3>", unsafe_allow_html=True)
-        st.sidebar.divider()
-        
         menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         pagina_selecionada = st.sidebar.radio("Navegação Principal", menu_opcoes, label_visibility="collapsed")
         
@@ -104,18 +95,16 @@ else:
             st.session_state['autenticado'] = False
             st.rerun()
 
-        # --- CONTEÚDO DA PÁGINA ---
+        # --- PÁGINA: DASHBOARD GERAL ---
         if pagina_selecionada == "📊 Dashboard Geral":
             st.title("📊 Dashboard Comercial")
             
-            # --- FILTROS NO TOPO DA PÁGINA ---
-            # Deixei expanded=True para que ele já venha aberto, se preferir fechado, mude para False
+            # --- FILTROS NO TOPO (Expander) ---
             with st.expander("🔍 FILTROS DO RELATÓRIO", expanded=True):
-                # Organização: col_f1 (Esquerda) | col_f2 (Direita)
-                col_f1, col_f2 = st.columns(2)
+                col_esq, col_dir = st.columns(2)
                 
-                with col_f1:
-                    # LADO ESQUERDO: Data, Tipo de Lead, Origem do Lead
+                with col_esq:
+                    # Lado Esquerdo: Período, Tipo e Origem
                     data_min, data_max = df['Data de criação'].dropna().min().date(), df['Data de criação'].dropna().max().date()
                     periodo = st.date_input("Período do Evento", [data_min, data_max])
                     
@@ -125,124 +114,92 @@ else:
                     lista_origens = sorted(df["[IS] Origem do lead"].dropna().unique().tolist())
                     origens_sel = st.multiselect("Origem do Lead", lista_origens, default=lista_origens)
                 
-                with col_f2:
-                    # LADO DIREITO: SDR e Closer
+                with col_dir:
+                    # Lado Direito: SDR e Closer (SÓ APARECE PARA MASTER)
                     if st.session_state['perfil'] == "master":
-                        # Adicionei um espaço em branco invisível só para alinhar melhor visualmente com o lado esquerdo
                         st.markdown("<div style='height: 72px;'></div>", unsafe_allow_html=True) 
-                        
                         lista_sdrs = sorted(df['Filtro_SDR'].unique().tolist())
                         sdrs_sel = st.multiselect("SDR Responsável", lista_sdrs, default=lista_sdrs)
                         
                         lista_closers = sorted(df['Filtro_Closer'].unique().tolist())
                         closers_sel = st.multiselect("Closer Responsável", lista_closers, default=lista_closers)
                     else:
+                        # Operador MKT: O sistema filtra tudo internamente sem mostrar os campos
                         sdrs_sel = df['Filtro_SDR'].unique().tolist()
                         closers_sel = df['Filtro_Closer'].unique().tolist()
-                        st.info("Visão de membros da equipe comercial restrita a perfis Admin/Master.")
+                        st.info("Filtros de equipe restritos ao perfil Admin.")
 
-            # --- APLICAÇÃO DOS FILTROS ---
-            mask_attr = (
+            # Aplicação dos Filtros de Atributo
+            df_base = df[
                 (df["[IS] Origem do lead"].isin(origens_sel)) &
                 (df["[IS] Tipo de lead"].isin(tipos_sel)) &
                 (df['Filtro_SDR'].isin(sdrs_sel)) &
                 (df['Filtro_Closer'].isin(closers_sel))
-            )
-            df_base = df[mask_attr].copy()
+            ].copy()
 
+            # Máscaras de Período (Dinamismo por Data Selecionada)
             if len(periodo) == 2:
                 p_start, p_end = periodo[0], periodo[1]
                 mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-                mC = (df_base['Data Contato'].dt.date >= p_start) & (df_base['Data Contato'].dt.date <= p_end)
-                mA = (df_base['Data Agendamento'].dt.date >= p_start) & (df_base['Data Agendamento'].dt.date <= p_end)
-                mR = (df_base['Data Reuniao'].dt.date >= p_start) & (df_base['Data Reuniao'].dt.date <= p_end)
-                mF = (df_base['Data Fechamento'].dt.date >= p_start) & (df_base['Data Fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
+                mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
+                mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
+                mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
+                mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
                 ano_ref = p_end.year
             else:
-                mL = df_base['Data de criação'].notna(); mC = df_base['Data Contato'].notna(); mA = df_base['Data Agendamento'].notna(); mR = df_base['Data Reuniao'].notna(); mF = df_base['Etapa do negócio'].isin(['Fechado', 'Pago'])
+                # Fallback caso a data esteja incompleta
+                mL = df_base['Data de criação'].notna(); mC = df_base['Contato Realizado'].notna(); mA = df_base['[IS/SDR] Data do Agendamento'].notna(); mR = df_base['[IS/Closer] Reunião Ocorrida'].notna(); mF = df_base['Etapa do negócio'].isin(['Fechado', 'Pago'])
                 ano_ref = 2026
 
-            # --- FUNIL DO PERÍODO ---
-            st.write("")
+            # --- RENDERIZAÇÃO: FUNIL DO PERÍODO ---
+            st.subheader("📅 Resultados do Período Selecionado")
             L, C, A, R, F = mL.sum(), mC.sum(), mA.sum(), mR.sum(), mF.sum()
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Leads", f"{L}")
-            c2.metric("Contato", f"{C}", f"{(C/L*100):.1f}%" if L>0 else "0%")
-            c3.metric("Agendado", f"{A}", f"{(A/C*100):.1f}%" if C>0 else "0%")
-            c4.metric("Ocorrido", f"{R}", f"{(R/A*100):.1f}%" if A>0 else "0%")
-            c5.metric("Fechado", f"{F}", f"{(F/R*100):.1f}%" if R>0 else "0%")
+            c2.metric("Contato", f"{C}", f"{(C/L*100):.1f}% s/ Lead" if L>0 else "0%")
+            c3.metric("Agendado", f"{A}", f"{(A/C*100):.1f}% s/ Contato" if C>0 else "0%")
+            c4.metric("Ocorrido", f"{R}", f"{(R/A*100):.1f}% s/ Agend." if A>0 else "0%")
+            c5.metric("Fechado", f"{F}", f"{(F/R*100):.1f}% s/ Ocorr." if R>0 else "0%")
 
             st.divider()
 
-            # --- TABELAS DE APOIO (Origem e Tipo) ---
-            def criar_tabela_evento(coluna_nome):
-                l_cat = df_base[mL].groupby(coluna_nome).size().reset_index(name='Leads')
-                r_cat = df_base[mR].groupby(coluna_nome).size().reset_index(name='Reunioes')
-                f_cat = df_base[mF].groupby(coluna_nome).size().reset_index(name='Fechados')
-                t = l_cat.merge(r_cat, on=coluna_nome, how='outer').merge(f_cat, on=coluna_nome, how='outer').fillna(0)
-                t['Lead x Fechado (%)'] = t.apply(lambda row: f"{(row['Fechados']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
-                return t[[coluna_nome, 'Leads', 'Reunioes', 'Fechados', 'Lead x Fechado (%)']].sort_values(by='Leads', ascending=False)
+            # --- TABELAS POR ORIGEM E TIPO ---
+            def criar_tabela(col):
+                l_cat = df_base[mL].groupby(col).size().reset_index(name='Leads')
+                f_cat = df_base[mF].groupby(col).size().reset_index(name='Fechados')
+                t = l_cat.merge(f_cat, on=col, how='outer').fillna(0)
+                t['% Conv'] = t.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
+                return t.sort_values('Leads', ascending=False)
 
-            col_a, col_b = st.columns(2)
-            with col_a: 
-                st.subheader("📍 Por Origem")
-                st.dataframe(criar_tabela_evento("[IS] Origem do lead"), use_container_width=True, hide_index=True)
-            with col_b: 
-                st.subheader("🏷️ Por Tipo")
-                st.dataframe(criar_tabela_evento("[IS] Tipo de lead"), use_container_width=True, hide_index=True)
+            ca, cb = st.columns(2)
+            with ca: st.subheader("📍 Por Origem"); st.dataframe(criar_tabela("[IS] Origem do lead"), use_container_width=True, hide_index=True)
+            with cb: st.subheader("🏷️ Por Tipo"); st.dataframe(criar_tabela("[IS] Tipo de lead"), use_container_width=True, hide_index=True)
 
-            # --- BLOCO MASTER (ACUMULADO E PERFORMANCE) ---
+            # --- BLOCO EXCLUSIVO MASTER (ACUMULADO ANUAL E TIME) ---
             if st.session_state['perfil'] == "master":
                 st.divider()
-                
-                # ACUMULADO DO ANO
                 st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
-                mY_L = df_base['Data de criação'].dt.year == ano_ref
-                mY_C = df_base['Data Contato'].dt.year == ano_ref
-                mY_A = df_base['Data Agendamento'].dt.year == ano_ref
-                mY_R = df_base['Data Reuniao'].dt.year == ano_ref
-                mY_F = (df_base['Data Fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
                 
-                L_y, C_y, A_y, R_y, F_y = mY_L.sum(), mY_C.sum(), mY_A.sum(), mY_R.sum(), mY_F.sum()
-                cy1, cy2, cy3, cy4, cy5 = st.columns(5)
-                cy1.metric("Leads (Ano)", f"{L_y}")
-                cy2.metric("Contatos (Ano)", f"{C_y}", f"{(C_y/L_y*100):.1f}%" if L_y>0 else "0%")
-                cy3.metric("Agendados (Ano)", f"{A_y}", f"{(A_y/C_y*100):.1f}%" if C_y>0 else "0%")
-                cy4.metric("Reuniões (Ano)", f"{R_y}", f"{(R_y/A_y*100):.1f}%" if A_y>0 else "0%")
-                cy5.metric("Fechados (Ano)", f"{F_y}", f"{(F_y/R_y*100):.1f}%" if R_y>0 else "0%")
+                # Cálculos YTD (Year To Date)
+                y_leads = (df_base['Data de criação'].dt.year == ano_ref).sum()
+                y_contatos = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
+                y_agendados = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
+                y_ocorridos = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
+
+                cy1, cy2, cy3, cy4 = st.columns(4)
+                cy1.metric("Leads (Ano)", f"{y_leads}")
+                cy2.metric("Contatos (Ano)", f"{y_contatos}")
+                cy3.metric("Agendados (Ano)", f"{y_agendados}")
+                cy4.metric("Ocorridos (Ano)", f"{y_ocorridos}")
 
                 st.divider()
+                st.subheader("🏆 Performance SDR (Período)")
+                sdr_perf = df_base[mL].groupby('Filtro_SDR').size().reset_index(name='Leads').sort_values('Leads', ascending=False)
+                st.dataframe(sdr_perf, use_container_width=True, hide_index=True)
 
-                # PERFORMANCE VENDEDORES
-                st.subheader("🏆 Performance por SDR")
-                sdr_l = df_base[mL].groupby('Filtro_SDR').size().reset_index(name='Leads')
-                sdr_c = df_base[mC].groupby('Filtro_SDR').size().reset_index(name='Contatos')
-                sdr_r = df_base[mR].groupby('Filtro_SDR').size().reset_index(name='Ocorridos')
-                df_sdr = sdr_l.merge(sdr_c, on='Filtro_SDR', how='outer').merge(sdr_r, on='Filtro_SDR', how='outer').fillna(0).rename(columns={'Filtro_SDR': 'SDR Responsável'})
-                df_sdr['Ocorr/Lead (%)'] = df_sdr.apply(lambda row: f"{(row['Ocorridos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "-", axis=1)
-                st.dataframe(df_sdr.sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
-
-                st.write("")
-                st.subheader("🎯 Eficiência Closer")
-                cl_ef_r = df_base[mR & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Ocorridos')
-                cl_ef_f = df_base[mF & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Fechados')
-                ef_cl = cl_ef_r.merge(cl_ef_f, on='Filtro_Closer', how='outer').fillna(0).rename(columns={'Filtro_Closer': 'Closer Responsável'})
-                ef_cl['Taxa de Fecho (%)'] = ef_cl.apply(lambda row: f"{(row['Fechados']/row['Ocorridos']*100):.1f}%" if row['Ocorridos'] > 0 else "-", axis=1)
-                st.dataframe(ef_cl.sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
-
-        # --- OUTRAS PÁGINAS ---
-        elif pagina_selecionada == "📦 Visão de Produtos":
-            st.title("📦 Visão de Produtos")
-            st.info("Em breve.")
-        elif pagina_selecionada == "💰 Receita":
-            st.title("💰 Receita")
-            st.info("Em breve.")
-        elif pagina_selecionada == "❌ Perdidos":
-            st.title("❌ Perdidos")
-            st.info("Em breve.")
-        elif pagina_selecionada == "⚙️ Configurações":
-            st.title("⚙️ Configurações")
-            st.info("Em breve.")
+        else:
+            st.title(pagina_selecionada)
+            st.info("Seção em desenvolvimento estrutural.")
 
     except Exception as e:
-        st.error(f"Erro ao processar os dados: {e}")
+        st.error(f"Erro ao processar dados: {e}")
