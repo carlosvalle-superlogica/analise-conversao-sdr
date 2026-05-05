@@ -7,8 +7,8 @@ st.set_page_config(page_title="Sistema de Gestão Comercial", layout="wide")
 st.markdown("""
     <style>
     .stApp { background-color: #F0F8FF; }
-    span[data-baseweb="tag"] { background-color: #1565C0 !important; color: white !important; }
     
+    /* ===== CARDS DE MÉTRICAS ===== */
     div[data-testid="stMetricValue"] {
         background-color: #FFFFFF; border-radius: 10px; padding: 10px; border: 1px solid #90CAF9; color: #0D47A1;
     }
@@ -18,14 +18,32 @@ st.markdown("""
     [data-testid="stMetricDelta"] svg { display: none; }
     h1, h2, h3, h4 { color: #1565C0 !important; font-weight: 700 !important; }
     
-    /* Remove o vermelho padrão de seleções vazias se houver */
-    .stMultiSelect span { color: #1565C0 !important; }
-    
-    /* Expander de Filtros */
+    /* ===== CAIXA DE FILTROS (EXPANDER) ===== */
     [data-testid="stExpander"] {
         background-color: #FFFFFF !important;
-        border: 1px solid #90CAF9 !important;
+        border: 2px solid #90CAF9 !important; /* Borda azul clara para destacar a caixa */
         border-radius: 8px !important;
+    }
+    
+    /* Títulos acima dos filtros (Ex: "Tipo de Lead", "SDR Responsável") */
+    div[data-testid="stMultiSelect"] label p, 
+    div[data-testid="stDateInput"] label p {
+        color: #0D47A1 !important; /* Azul Escuro e Forte */
+        font-weight: 800 !important;
+        font-size: 15px !important;
+    }
+    
+    /* Tags selecionadas (os chips com os nomes) */
+    span[data-baseweb="tag"] {
+        background-color: #1565C0 !important; /* Fundo Azul */
+    }
+    span[data-baseweb="tag"] span {
+        color: #FFFFFF !important; /* Texto Branco para máximo contraste */
+        font-weight: 600 !important;
+    }
+    /* Ícone do "X" na tag */
+    span[data-baseweb="tag"] svg {
+        fill: #FFFFFF !important; 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -91,22 +109,28 @@ else:
             st.title("📊 Dashboard Comercial")
             
             # --- FILTROS NO TOPO DA PÁGINA ---
-            with st.expander("🔍 FILTROS DO RELATÓRIO", expanded=False):
+            # Deixei expanded=True para que ele já venha aberto, se preferir fechado, mude para False
+            with st.expander("🔍 FILTROS DO RELATÓRIO", expanded=True):
+                # Organização: col_f1 (Esquerda) | col_f2 (Direita)
                 col_f1, col_f2 = st.columns(2)
                 
                 with col_f1:
+                    # LADO ESQUERDO: Data, Tipo de Lead, Origem do Lead
                     data_min, data_max = df['Data de criação'].dropna().min().date(), df['Data de criação'].dropna().max().date()
                     periodo = st.date_input("Período do Evento", [data_min, data_max])
+                    
+                    lista_tipos = sorted(df["[IS] Tipo de lead"].dropna().unique().tolist())
+                    tipos_sel = st.multiselect("Tipo de Lead", lista_tipos, default=lista_tipos)
                     
                     lista_origens = sorted(df["[IS] Origem do lead"].dropna().unique().tolist())
                     origens_sel = st.multiselect("Origem do Lead", lista_origens, default=lista_origens)
                 
                 with col_f2:
-                    lista_tipos = sorted(df["[IS] Tipo de lead"].dropna().unique().tolist())
-                    tipos_sel = st.multiselect("Tipo de Lead", lista_tipos, default=lista_tipos)
-                    
-                    # Filtros de SDR e Closer (SÓ APARECEM NO MASTER)
+                    # LADO DIREITO: SDR e Closer
                     if st.session_state['perfil'] == "master":
+                        # Adicionei um espaço em branco invisível só para alinhar melhor visualmente com o lado esquerdo
+                        st.markdown("<div style='height: 72px;'></div>", unsafe_allow_html=True) 
+                        
                         lista_sdrs = sorted(df['Filtro_SDR'].unique().tolist())
                         sdrs_sel = st.multiselect("SDR Responsável", lista_sdrs, default=lista_sdrs)
                         
@@ -115,6 +139,7 @@ else:
                     else:
                         sdrs_sel = df['Filtro_SDR'].unique().tolist()
                         closers_sel = df['Filtro_Closer'].unique().tolist()
+                        st.info("Visão de membros da equipe comercial restrita a perfis Admin/Master.")
 
             # --- APLICAÇÃO DOS FILTROS ---
             mask_attr = (
