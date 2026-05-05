@@ -88,7 +88,15 @@ else:
         pipeline_selecionado = st.sidebar.selectbox("Selecione a Unidade", ["Aquisições", "Canais"], label_visibility="collapsed")
         
         st.sidebar.divider()
-        menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
+        
+        # ==============================================================================
+        # CONTROLE DE ACESSO NO MENU: MKT SÓ VÊ O DASHBOARD GERAL
+        # ==============================================================================
+        if st.session_state['perfil'] == "master":
+            menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
+        else:
+            menu_opcoes = ["📊 Dashboard Geral"]
+            
         pagina_selecionada = st.sidebar.radio("Navegação Principal", menu_opcoes, label_visibility="collapsed")
         
         st.sidebar.divider()
@@ -271,7 +279,7 @@ else:
                 col_prod = '[IS/Closer] Produtos Fechados'
                 
                 if col_prod in df_base.columns:
-                    # Filtra os negócios ganhos no período
+                    # Filtra os negócios ganhos no período e pega a coluna de produtos
                     df_vendas = df_base[mF][col_prod].dropna()
                     
                     # Explode os produtos separados por ponto e vírgula e remove espaços/vazios
@@ -312,7 +320,7 @@ else:
                         lambda x: f"{(x / total_reunioes * 100):.1f}%" if total_reunioes > 0 else "0.0%"
                     )
                     
-                    # ENQUADRAMENTO DA TABELA (Largura controlada: 70% tabela / 30% vazio para melhor leitura)
+                    # ENQUADRAMENTO DA TABELA (Largura controlada)
                     col_tabela, col_vazia = st.columns([7, 3])
                     
                     with col_tabela:
@@ -322,7 +330,7 @@ else:
                             hide_index=True
                         )
                     
-                    # ESPAÇAMENTO INFERIOR (Para permitir rolagem suave sem espremer a tela)
+                    # ESPAÇAMENTO INFERIOR PARA MELHOR SCROLL
                     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
                     
                 else:
