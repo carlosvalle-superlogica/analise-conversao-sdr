@@ -339,33 +339,29 @@ else:
                     st.divider()
                     
                     # ==============================================================================
-                    # MATRIZ DE SINERGIA: SDR X CLOSER
+                    # MATRIZ DE SINERGIA: SDR X CLOSER (Ajustado para mostrar apenas a % de conversão)
                     # ==============================================================================
                     st.subheader("🤝 Sinergia da Equipe (Ocorrido x Fechado)")
-                    st.info("A matriz abaixo cruza a performance entre SDRs e Closers. O formato exibido é: **Qtd Fechada / Qtd Ocorrida (% de Conversão)**.")
+                    st.info("A matriz abaixo cruza a taxa de conversão (% de fechamento sobre as reuniões ocorridas) entre os profissionais.")
                     
-                    # Prepara os dados de cruzamento
                     df_sync_r = df_base[mR].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Ocorridos')
                     df_sync_f = df_base[mF].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Fechados')
                     df_sync = pd.merge(df_sync_r, df_sync_f, on=['Filtro_SDR', 'Filtro_Closer'], how='outer').fillna(0)
                     
-                    # Função para formatar o texto bonitinho (Fechado / Ocorrido (Conv%))
-                    def format_sync(row):
+                    # Função limpa: Retorna APENAS a porcentagem de conversão, ou um traço se não houve reunião.
+                    def format_sync_percent_only(row):
                         occ = int(row['Ocorridos'])
                         fec = int(row['Fechados'])
-                        if occ == 0 and fec == 0:
+                        if occ == 0:
                             return "-"
-                        elif occ == 0 and fec > 0:
-                            return f"{fec} / 0 (Erro)"
                         else:
                             conv = (fec / occ) * 100
-                            return f"{fec} / {occ} ({conv:.1f}%)"
+                            return f"{conv:.1f}%"
                             
-                    df_sync['Detalhe'] = df_sync.apply(format_sync, axis=1)
+                    df_sync['Conversao_Limpa'] = df_sync.apply(format_sync_percent_only, axis=1)
                     
-                    # Cria as Pivot Tables
-                    pivot_sdr_closer = df_sync.pivot(index='Filtro_SDR', columns='Filtro_Closer', values='Detalhe').fillna('-')
-                    pivot_closer_sdr = df_sync.pivot(index='Filtro_Closer', columns='Filtro_SDR', values='Detalhe').fillna('-')
+                    pivot_sdr_closer = df_sync.pivot(index='Filtro_SDR', columns='Filtro_Closer', values='Conversao_Limpa').fillna('-')
+                    pivot_closer_sdr = df_sync.pivot(index='Filtro_Closer', columns='Filtro_SDR', values='Conversao_Limpa').fillna('-')
                     
                     col_mat1, col_mat2 = st.columns(2)
                     
