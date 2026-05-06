@@ -79,7 +79,7 @@ else:
         df['[IS/Closer] Reunião Ocorrida'] = pd.to_datetime(df['[IS/Closer] Reunião Ocorrida'], errors='coerce')
         df['Data de fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
 
-        # Equipe
+        # Equipe e CS
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
 
@@ -89,9 +89,7 @@ else:
         
         st.sidebar.divider()
         
-        # ==============================================================================
-        # CONTROLE DE ACESSO NO MENU: MKT SÓ VÊ O DASHBOARD GERAL
-        # ==============================================================================
+        # Oculta menus para o Marketing
         if st.session_state['perfil'] == "master":
             menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
@@ -248,23 +246,42 @@ else:
 
                     st.write("")
                     
-                    # TABELAS DE EFICIÊNCIA LADO A LADO
-                    col_ef1, col_ef2 = st.columns(2)
+                    # TABELAS DE EFICIÊNCIA (AGORA EM 3 COLUNAS: SDR, CLOSER E CS)
+                    col_ef1, col_ef2, col_ef3 = st.columns(3)
                     
                     with col_ef1:
-                        st.subheader("🎯 Eficiência SDR (Qualidade)")
+                        st.subheader("🎯 Eficiência SDR")
                         t_sdr_q = t_sdr_funil[['Filtro_SDR', 'Leads', 'Ocorridos', 'Fechados']].copy()
                         t_sdr_q['L x Ocorrido %'] = t_sdr_q.apply(lambda r: f"{(r['Ocorridos']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
                         t_sdr_q['L x Fechado %'] = t_sdr_q.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
                         st.dataframe(t_sdr_q.rename(columns={'Filtro_SDR': 'SDR Responsável'}).sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
                     with col_ef2:
-                        st.subheader("🎯 Eficiência Closer (Período)")
+                        st.subheader("🎯 Eficiência Closer")
                         cl_r = df_base[mR & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Ocorridos')
                         cl_f = df_base[mF & (df_base['Filtro_Closer'] != 'Sem Closer')].groupby('Filtro_Closer').size().reset_index(name='Fechados')
                         t_cl = cl_r.merge(cl_f, on='Filtro_Closer', how='outer').fillna(0)
                         t_cl['Ocorrido x Fechado %'] = t_cl.apply(lambda r: f"{(r['Fechados']/r['Ocorridos']*100):.1f}%" if r['Ocorridos']>0 else "0%", axis=1)
                         st.dataframe(t_cl.rename(columns={'Filtro_Closer': 'Closer Responsável'}).sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
+
+                    with col_ef3:
+                        st.subheader("🎯 Eficiência CS (Indicações)")
+                        col_cs = '[CS] CS que indicou'
+                        if col_cs in df_base.columns:
+                            # Filtramos para ignorar os vazios (NaN ou Strings Vazias) para mostrar apenas quando houve CS
+                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
+                            
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Leads')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Ocorridos')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados')
+                            
+                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
+                            t_cs['L x Ocorrido %'] = t_cs.apply(lambda r: f"{(r['Ocorridos']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
+                            t_cs['L x Fechado %'] = t_cs.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
+                            
+                            st.dataframe(t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+                        else:
+                            st.warning(f"Coluna '{col_cs}' não encontrada.")
 
             # --------------------------------------------------------------------------
             # PÁGINA: VISÃO DE PRODUTOS
@@ -272,30 +289,24 @@ else:
             elif pagina_selecionada == "📦 Visão de Produtos":
                 st.title("📦 Visão de Produtos - Aquisições")
                 
-                # Base de cálculo de denominadores e numeradores gerais
                 total_reunioes = mR.sum()
                 total_clientes = mF.sum()
                 
                 col_prod = '[IS/Closer] Produtos Fechados'
                 
                 if col_prod in df_base.columns:
-                    # Filtra os negócios ganhos no período e pega a coluna de produtos
                     df_vendas = df_base[mF][col_prod].dropna()
                     
-                    # Explode os produtos separados por ponto e vírgula e remove espaços/vazios
                     produtos_separados = df_vendas.str.split(';').explode().str.strip()
                     produtos_separados = produtos_separados[produtos_separados != ""]
                     
-                    # Contagem dos produtos
                     contagem_prod = produtos_separados.value_counts().reset_index()
                     contagem_prod.columns = ['Produto', 'Qtd. Vendida']
                     total_produtos = contagem_prod['Qtd. Vendida'].sum()
                     
-                    # Cálculo das conversões gerais
                     conv_cliente = (total_clientes / total_reunioes * 100) if total_reunioes > 0 else 0.0
                     conv_produto = (total_produtos / total_reunioes * 100) if total_reunioes > 0 else 0.0
                     
-                    # CARDS DE MÉTRICAS (VISÃO TOPO)
                     st.subheader("🎯 Resumo de Conversão (Período)")
                     cp1, cp2, cp3, cp4, cp5 = st.columns(5)
                     cp1.metric("Reuniões Ocorridas", f"{total_reunioes}")
@@ -306,21 +317,17 @@ else:
                     
                     st.divider()
 
-                    # TABELA DETALHADA
                     st.subheader("📊 Performance por Produto Fechado")
                     st.info(f"A tabela exibe a relevância de cada produto no faturamento total (**% do Mix**) e a eficácia de venda por reunião (**Conversão vs Reuniões**).")
                     
-                    # Coluna 1: O quanto esse produto representa de todos os produtos vendidos
                     contagem_prod['% do Mix (Total Vendido)'] = contagem_prod['Qtd. Vendida'].apply(
                         lambda x: f"{(x / total_produtos * 100):.1f}%" if total_produtos > 0 else "0.0%"
                     )
                     
-                    # Coluna 2: A conversão real baseada nas reuniões ocorridas
                     contagem_prod['Conversão (vs Reuniões)'] = contagem_prod['Qtd. Vendida'].apply(
                         lambda x: f"{(x / total_reunioes * 100):.1f}%" if total_reunioes > 0 else "0.0%"
                     )
                     
-                    # ENQUADRAMENTO DA TABELA (Largura controlada)
                     col_tabela, col_vazia = st.columns([7, 3])
                     
                     with col_tabela:
@@ -330,7 +337,6 @@ else:
                             hide_index=True
                         )
                     
-                    # ESPAÇAMENTO INFERIOR PARA MELHOR SCROLL
                     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
                     
                 else:
