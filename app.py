@@ -89,7 +89,7 @@ else:
         
         st.sidebar.divider()
         
-        # Oculta menus para o Marketing
+        # Oculta menus para o Marketing (Blindagem de Perfil)
         if st.session_state['perfil'] == "master":
             menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
@@ -246,7 +246,7 @@ else:
 
                     st.write("")
                     
-                    # TABELAS DE EFICIÊNCIA (AGORA EM 3 COLUNAS: SDR, CLOSER E CS)
+                    # TABELAS DE EFICIÊNCIA (SDR, CLOSER, CS)
                     col_ef1, col_ef2, col_ef3 = st.columns(3)
                     
                     with col_ef1:
@@ -268,9 +268,7 @@ else:
                         st.subheader("🎯 Eficiência CS (Indicações)")
                         col_cs = '[CS] CS que indicou'
                         if col_cs in df_base.columns:
-                            # Filtramos para ignorar os vazios (NaN ou Strings Vazias) para mostrar apenas quando houve CS
                             mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
-                            
                             cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Leads')
                             cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Ocorridos')
                             cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados')
@@ -337,6 +335,49 @@ else:
                             hide_index=True
                         )
                     
+                    st.write("")
+                    st.divider()
+                    
+                    # ==============================================================================
+                    # MATRIZ DE SINERGIA: SDR X CLOSER
+                    # ==============================================================================
+                    st.subheader("🤝 Sinergia da Equipe (Ocorrido x Fechado)")
+                    st.info("A matriz abaixo cruza a performance entre SDRs e Closers. O formato exibido é: **Qtd Fechada / Qtd Ocorrida (% de Conversão)**.")
+                    
+                    # Prepara os dados de cruzamento
+                    df_sync_r = df_base[mR].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Ocorridos')
+                    df_sync_f = df_base[mF].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Fechados')
+                    df_sync = pd.merge(df_sync_r, df_sync_f, on=['Filtro_SDR', 'Filtro_Closer'], how='outer').fillna(0)
+                    
+                    # Função para formatar o texto bonitinho (Fechado / Ocorrido (Conv%))
+                    def format_sync(row):
+                        occ = int(row['Ocorridos'])
+                        fec = int(row['Fechados'])
+                        if occ == 0 and fec == 0:
+                            return "-"
+                        elif occ == 0 and fec > 0:
+                            return f"{fec} / 0 (Erro)"
+                        else:
+                            conv = (fec / occ) * 100
+                            return f"{fec} / {occ} ({conv:.1f}%)"
+                            
+                    df_sync['Detalhe'] = df_sync.apply(format_sync, axis=1)
+                    
+                    # Cria as Pivot Tables
+                    pivot_sdr_closer = df_sync.pivot(index='Filtro_SDR', columns='Filtro_Closer', values='Detalhe').fillna('-')
+                    pivot_closer_sdr = df_sync.pivot(index='Filtro_Closer', columns='Filtro_SDR', values='Detalhe').fillna('-')
+                    
+                    col_mat1, col_mat2 = st.columns(2)
+                    
+                    with col_mat1:
+                        st.markdown("<h4 style='color: #0D47A1;'>🔄 Visão: SDR por Closer</h4>", unsafe_allow_html=True)
+                        st.dataframe(pivot_sdr_closer, use_container_width=True)
+                        
+                    with col_mat2:
+                        st.markdown("<h4 style='color: #0D47A1;'>🔄 Visão: Closer por SDR</h4>", unsafe_allow_html=True)
+                        st.dataframe(pivot_closer_sdr, use_container_width=True)
+                    
+                    # ESPAÇAMENTO INFERIOR PARA MELHOR SCROLL
                     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
                     
                 else:
