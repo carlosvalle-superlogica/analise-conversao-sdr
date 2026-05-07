@@ -143,7 +143,7 @@ else:
             
         pagina_selecionada = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
         
-        st.sidebar.v_spacer(height=20)
+        st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
         st.sidebar.divider()
         if st.sidebar.button("🚪 Sair do Sistema", use_container_width=True):
             st.session_state['autenticado'] = False
@@ -199,6 +199,15 @@ else:
             mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             ano_ref = p_end.year
+        else:
+            # Fallback seguro caso apenas 1 data seja selecionada
+            p_end = df['Data de criação'].max()
+            ano_ref = p_end.year if pd.notna(p_end) else 2026
+            mL = pd.Series([False]*len(df_base), index=df_base.index)
+            mC = pd.Series([False]*len(df_base), index=df_base.index)
+            mA = pd.Series([False]*len(df_base), index=df_base.index)
+            mR = pd.Series([False]*len(df_base), index=df_base.index)
+            mF = pd.Series([False]*len(df_base), index=df_base.index)
 
         # ==============================================================================
         # ROTEAMENTO DE PÁGINAS E PIPELINES
@@ -211,7 +220,12 @@ else:
             if pagina_selecionada == "📊 Dashboard Geral":
                 st.markdown("### 📈 Performance de Funil: Aquisições")
                 
-                L, C, A, R, F = mL.sum(), mC.sum(), mA.sum(), mR.sum(), mF.sum()
+                L = mL.sum()
+                C = mC.sum()
+                A = mA.sum()
+                R = mR.sum()
+                F = mF.sum()
+                
                 c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Leads", f"{L}")
                 c2.metric("Contato", f"{C}", f"{(C/L*100):.1f}%" if L>0 else "0%")
@@ -242,11 +256,9 @@ else:
                     st.subheader("🚀 Por Jornada")
                     st.dataframe(criar_tabela_mkt("[IS] Lead com Jornada:"), use_container_width=True, hide_index=True)
 
-                # VISÃO MASTER
                 if st.session_state['perfil'] == "master":
                     st.divider()
                     
-                    # ACUMULADO DO ANO
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
                     myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
@@ -263,7 +275,6 @@ else:
 
                     st.divider()
                     
-                    # PERFORMANCE SDR - FUNIL COMPLETO
                     st.subheader("🏆 Performance SDR: Funil de Conversão (Período)")
                     s_l = df_base[mL].groupby('Filtro_SDR').size().reset_index(name='Leads')
                     s_c = df_base[mC].groupby('Filtro_SDR').size().reset_index(name='Contatos')
@@ -285,7 +296,6 @@ else:
 
                     st.write("")
                     
-                    # TABELAS DE EFICIÊNCIA (SDR, CLOSER, CS)
                     col_ef1, col_ef2, col_ef3 = st.columns(3)
                     
                     with col_ef1:
@@ -304,7 +314,7 @@ else:
                         st.dataframe(t_cl.rename(columns={'Filtro_Closer': 'Closer Responsável'}).sort_values(by='Ocorridos', ascending=False), use_container_width=True, hide_index=True)
 
                     with col_ef3:
-                        st.subheader("🎯 Eficiência CS (Indicações)")
+                        st.subheader("🎯 Eficiência CS")
                         col_cs = '[CS] CS que indicou'
                         if col_cs in df_base.columns:
                             mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
@@ -376,16 +386,12 @@ else:
                     st.write("")
                     st.divider()
                     
-                    # ==============================================================================
-                    # MATRIZ DE SINERGIA: SDR X CLOSER
-                    # ==============================================================================
-                    st.subheader("🤝 Sinergia da Equipe (Ocorrido x Fechado)")
+                    st.subheader("🤝 Sinergia da Equipe (Conversão Ocorrido x Fechado)")
                     
                     df_sync_r = df_base[mR].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Ocorridos')
                     df_sync_f = df_base[mF].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Fechados')
                     df_sync = pd.merge(df_sync_r, df_sync_f, on=['Filtro_SDR', 'Filtro_Closer'], how='outer').fillna(0)
                     
-                    # Formatação % limpa
                     def format_sync_percent_only(row):
                         occ = int(row['Ocorridos'])
                         fec = int(row['Fechados'])
@@ -410,7 +416,6 @@ else:
                         st.markdown("<h4 style='color: #334155;'>🔄 Visão: Closer por SDR</h4>", unsafe_allow_html=True)
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
                     
-                    # Espaçamento inferior para rolagem suave
                     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
                     
                 else:
@@ -424,7 +429,7 @@ else:
                 st.info("Página em desenvolvimento estrutural.")
 
         # ==============================================================================
-        # LÓGICA BLINDADA - CANAIS (PREPARADO PARA NOVO CSV)
+        # LÓGICA BLINDADA - CANAIS
         # ==============================================================================
         elif pipeline_selecionado == "Canais":
             st.markdown("### 📈 Performance de Funil: Canais")
