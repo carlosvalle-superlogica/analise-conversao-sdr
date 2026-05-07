@@ -9,14 +9,14 @@ st.set_page_config(page_title="Sistema de Gestão Comercial", layout="wide")
 st.markdown("""
     <style>
     /* Importação de fonte moderna */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"]  {
         font-family: 'Inter', sans-serif;
         background-color: #F8FAFC;
     }
 
-    /* CORREÇÃO DA BARRA SUPERIOR: Deixa o header transparente para o botão do menu lateral não sumir, mas esconde o Menu Hambúrguer e o Footer */
+    /* CORREÇÃO DA BARRA SUPERIOR */
     header {background-color: transparent !important;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -25,8 +25,43 @@ st.markdown("""
     [data-testid="stSidebar"] {
         background-color: #FFFFFF;
         border-right: 1px solid #E2E8F0;
-        box-shadow: 4px 0px 15px rgba(0,0,0,0.05);
+        box-shadow: 4px 0px 15px rgba(0,0,0,0.03);
     }
+
+    /* ========================================================= */
+    /* NOVO: TRANSFORMAÇÃO DO MENU LATERAL EM CAIXAS/BOTÕES      */
+    /* ========================================================= */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        padding: 12px 16px !important;
+        margin-bottom: 8px !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
+        transition: all 0.2s ease-in-out !important;
+        cursor: pointer;
+    }
+
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+        background-color: #F8FAFC !important;
+        border-color: #CBD5E1 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(0,0,0,0.05) !important;
+    }
+
+    /* Esconder a bolinha do radio button */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
+        display: none !important;
+    }
+
+    /* Estilo do Texto do Menu */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label p {
+        margin-left: 0 !important;
+        font-weight: 600 !important;
+        color: #334155 !important;
+        font-size: 0.95rem !important;
+    }
+    /* ========================================================= */
 
     /* Cards de Métricas Estilo SaaS */
     div[data-testid="stMetricValue"] {
@@ -36,7 +71,7 @@ st.markdown("""
         border: 1px solid #E2E8F0; 
         color: #0F172A;
         font-weight: 700;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
     }
     
     /* Ajuste no Delta (Porcentagem dos cards) */
@@ -54,7 +89,7 @@ st.markdown("""
         background-color: #FFFFFF !important;
         border: 1px solid #E2E8F0 !important;
         border-radius: 12px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         margin-bottom: 1rem;
     }
 
@@ -65,9 +100,11 @@ st.markdown("""
         overflow: hidden;
     }
 
-    /* Títulos e Subtítulos */
-    h1 { color: #1E293B !important; font-weight: 700 !important; letter-spacing: -0.02em; }
-    h2, h3, h4 { color: #334155 !important; font-weight: 600 !important; }
+    /* Títulos e Subtítulos - Tipografia Refinada */
+    h1 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.025em; }
+    h2 { color: #1E293B !important; font-weight: 700 !important; letter-spacing: -0.02em; }
+    h3 { color: #334155 !important; font-weight: 600 !important; letter-spacing: -0.01em; }
+    h4 { color: #475569 !important; font-weight: 600 !important; }
 
     /* Botões */
     .stButton>button {
@@ -79,11 +116,12 @@ st.markdown("""
     /* Títulos dos Filtros e Tags */
     div[data-testid="stMultiSelect"] label p, 
     div[data-testid="stDateInput"] label p {
-        color: #0D47A1 !important;
-        font-weight: 800 !important;
+        color: #1E40AF !important;
+        font-weight: 700 !important;
+        font-size: 0.9rem !important;
     }
-    span[data-baseweb="tag"] { background-color: #1565C0 !important; }
-    span[data-baseweb="tag"] span { color: #FFFFFF !important; font-weight: 600 !important; }
+    span[data-baseweb="tag"] { background-color: #1E40AF !important; border-radius: 6px !important;}
+    span[data-baseweb="tag"] span { color: #FFFFFF !important; font-weight: 500 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -130,14 +168,14 @@ else:
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
 
         # --- BARRA LATERAL (SIDEBAR) ---
-        st.sidebar.markdown("<h2 style='font-size: 1.2rem; margin-bottom: 0px;'>Pipeline</h2>", unsafe_allow_html=True)
+        st.sidebar.markdown("<h2 style='font-size: 1.1rem; margin-bottom: 5px;'>Pipeline</h2>", unsafe_allow_html=True)
         pipeline_selecionado = st.sidebar.selectbox("Pipeline", ["Aquisições", "Canais"], label_visibility="collapsed")
         
-        st.sidebar.markdown("<br><h2 style='font-size: 1.2rem; margin-bottom: 0px;'>Módulos</h2>", unsafe_allow_html=True)
+        st.sidebar.markdown("<br><h2 style='font-size: 1.1rem; margin-bottom: 5px;'>Módulos</h2>", unsafe_allow_html=True)
         
         # Oculta menus para o Marketing
         if st.session_state['perfil'] == "master":
-            menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
+            menu_opcoes = ["📊 Dashboard Geral", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
             menu_opcoes = ["📊 Dashboard Geral"]
             
@@ -170,7 +208,7 @@ else:
                 jornada_sel = st.multiselect("Jornada do Lead", lista_jornada, default=lista_jornada)
                 
                 if st.session_state['perfil'] == "master":
-                    st.markdown("<div style='height: 72px;'></div>", unsafe_allow_html=True) 
+                    st.markdown("<div style='height: 70px;'></div>", unsafe_allow_html=True) 
                     lista_sdrs = sorted(df['Filtro_SDR'].unique().tolist())
                     sdrs_sel = st.multiselect("SDR Responsável", lista_sdrs, default=lista_sdrs)
                     
@@ -330,10 +368,10 @@ else:
                             st.warning(f"Coluna '{col_cs}' não encontrada.")
 
             # --------------------------------------------------------------------------
-            # PÁGINA: VISÃO DE PRODUTOS
+            # PÁGINA: PRODUTOS / CLOSER'S / VC
             # --------------------------------------------------------------------------
-            elif pagina_selecionada == "📦 Visão de Produtos":
-                st.markdown("### 📦 Inventário e Conversão de Produtos")
+            elif pagina_selecionada == "📦 Produtos / Closer's / VC":
+                st.markdown("### 📦 Produtos / Closer's / VC")
                 
                 total_reunioes = mR.sum()
                 total_clientes = mF.sum()
