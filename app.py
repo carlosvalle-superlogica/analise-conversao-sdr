@@ -28,9 +28,7 @@ st.markdown("""
         box-shadow: 4px 0px 15px rgba(0,0,0,0.03);
     }
 
-    /* ========================================================= */
-    /* NOVO: TRANSFORMAÇÃO DO MENU LATERAL EM CAIXAS/BOTÕES      */
-    /* ========================================================= */
+    /* TRANSFORMAÇÃO DO MENU LATERAL EM CAIXAS/BOTÕES */
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
         background-color: #FFFFFF !important;
         border: 1px solid #E2E8F0 !important;
@@ -49,19 +47,16 @@ st.markdown("""
         box-shadow: 0 3px 6px rgba(0,0,0,0.05) !important;
     }
 
-    /* Esconder a bolinha do radio button */
     [data-testid="stSidebar"] div[role="radiogroup"] > label > div:first-child {
         display: none !important;
     }
 
-    /* Estilo do Texto do Menu */
     [data-testid="stSidebar"] div[role="radiogroup"] > label p {
         margin-left: 0 !important;
         font-weight: 600 !important;
         color: #334155 !important;
         font-size: 0.95rem !important;
     }
-    /* ========================================================= */
 
     /* Cards de Métricas Estilo SaaS */
     div[data-testid="stMetricValue"] {
@@ -74,7 +69,6 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
     }
     
-    /* Ajuste no Delta (Porcentagem dos cards) */
     [data-testid="stMetricDelta"] > div {
         background-color: #EFF6FF !important; 
         color: #1E40AF !important; 
@@ -219,7 +213,7 @@ else:
                     closers_sel = df['Filtro_Closer'].unique().tolist()
 
         # ==============================================================================
-        # LÓGICA BLINDADA - APLICAÇÃO DOS FILTROS
+        # LÓGICA BLINDADA - APLICAÇÃO DOS FILTROS E MÁSCARAS MATEMÁTICAS
         # ==============================================================================
         df_base = df[
             (df["[IS] Origem do lead"].isin(origens_sel)) &
@@ -238,6 +232,7 @@ else:
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             ano_ref = p_end.year
         else:
+            # Proteção contra erros se o utilizador não selecionar a segunda data no calendário
             p_end = df['Data de criação'].max()
             ano_ref = p_end.year if pd.notna(p_end) else 2026
             mL = pd.Series([False]*len(df_base), index=df_base.index)
@@ -379,7 +374,8 @@ else:
                 col_prod = '[IS/Closer] Produtos Fechados'
                 
                 if col_prod in df_base.columns:
-                    df_vendas = df_base[mF][col_prod].dropna()
+                    # Garantir que dados que possam ser números se tornem texto para não quebrar o .split
+                    df_vendas = df_base[mF][col_prod].dropna().astype(str)
                     
                     produtos_separados = df_vendas.str.split(';').explode().str.strip()
                     produtos_separados = produtos_separados[produtos_separados != ""]
@@ -396,8 +392,10 @@ else:
                     cp1.metric("Reuniões Ocorridas", f"{total_reunioes}")
                     cp2.metric("Clientes Fechados", f"{total_clientes}")
                     cp3.metric("Produtos Vendidos", f"{total_produtos}")
-                    cp4.metric("Conv. Cliente", f"{conv_cliente:.1f}%")
-                    cp5.metric("Conv. Produto", f"{conv_produto:.1f}%")
+                    
+                    # AJUSTE DE NOMENCLATURA DOS CARDS PARA MÁXIMA CLAREZA
+                    cp4.metric("Conv. Clientes / Reuniões", f"{conv_cliente:.1f}%")
+                    cp5.metric("Conv. Produtos / Reuniões", f"{conv_produto:.1f}%")
                     
                     st.divider()
 
@@ -407,7 +405,7 @@ else:
                         lambda x: f"{(x / total_produtos * 100):.1f}%" if total_produtos > 0 else "0.0%"
                     )
                     
-                    contagem_prod['Conversão (vs Reuniões)'] = contagem_prod['Qtd. Vendida'].apply(
+                    contagem_prod['% Produto / Reunião'] = contagem_prod['Qtd. Vendida'].apply(
                         lambda x: f"{(x / total_reunioes * 100):.1f}%" if total_reunioes > 0 else "0.0%"
                     )
                     
@@ -415,7 +413,7 @@ else:
                     
                     with col_tabela:
                         st.dataframe(
-                            contagem_prod[['Produto', 'Qtd. Vendida', '% do Mix (Total Vendido)', 'Conversão (vs Reuniões)']].sort_values(by='Qtd. Vendida', ascending=False),
+                            contagem_prod[['Produto', 'Qtd. Vendida', '% do Mix (Total Vendido)', '% Produto / Reunião']].sort_values(by='Qtd. Vendida', ascending=False),
                             use_container_width=True,
                             hide_index=True
                         )
@@ -470,7 +468,7 @@ else:
         # ==============================================================================
         elif pipeline_selecionado == "Canais":
             st.markdown("### 📈 Performance de Funil: Canais")
-            st.warning("Aguardando importação do arquivo 'bd-canais.csv' para processamento de dados específicos desta unidade.")
+            st.warning("Aguardando importação do ficheiro 'bd-canais.csv' para processamento de dados específicos desta unidade.")
 
     except Exception as e:
         st.error(f"Erro ao processar dados: {e}")
