@@ -16,8 +16,8 @@ st.markdown("""
         background-color: #F8FAFC;
     }
 
-    /* Remover barra superior padrão do Streamlit */
-    header {visibility: hidden;}
+    /* CORREÇÃO DA BARRA SUPERIOR: Deixa o header transparente para o botão do menu lateral não sumir, mas esconde o Menu Hambúrguer e o Footer */
+    header {background-color: transparent !important;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 
@@ -200,7 +200,6 @@ else:
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             ano_ref = p_end.year
         else:
-            # Fallback seguro caso apenas 1 data seja selecionada
             p_end = df['Data de criação'].max()
             ano_ref = p_end.year if pd.notna(p_end) else 2026
             mL = pd.Series([False]*len(df_base), index=df_base.index)
