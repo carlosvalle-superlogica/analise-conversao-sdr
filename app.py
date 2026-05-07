@@ -2,29 +2,78 @@ import streamlit as st
 import pandas as pd
 
 # ==============================================================================
-# ESTRUTURA BLINDADA - CONFIGURAÇÃO E ESTILO (PADRÃO CORPORATIVO AZUL)
+# ESTRUTURA BLINDADA - CONFIGURAÇÃO E ESTILO (DESIGN DE SISTEMA PREMIUM)
 # ==============================================================================
-st.set_page_config(page_title="Sistema de Gestão Comercial - Blindado", layout="wide")
+st.set_page_config(page_title="Sistema de Gestão Comercial", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #F0F8FF; }
+    /* Importação de fonte moderna */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     
-    /* CARDS DE MÉTRICAS */
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
+        background-color: #F8FAFC;
+    }
+
+    /* Remover barra superior padrão do Streamlit */
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Customização da Barra Lateral */
+    [data-testid="stSidebar"] {
+        background-color: #FFFFFF;
+        border-right: 1px solid #E2E8F0;
+        box-shadow: 4px 0px 15px rgba(0,0,0,0.05);
+    }
+
+    /* Cards de Métricas Estilo SaaS */
     div[data-testid="stMetricValue"] {
-        background-color: #FFFFFF; border-radius: 10px; padding: 10px; border: 1px solid #90CAF9; color: #0D47A1;
+        background-color: #FFFFFF; 
+        border-radius: 12px; 
+        padding: 20px !important; 
+        border: 1px solid #E2E8F0; 
+        color: #0F172A;
+        font-weight: 700;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
-    [data-testid="stMetricDelta"] > div {
-        background-color: #1565C0 !important; color: white !important; border-radius: 5px; padding: 2px 8px; font-weight: bold;
-    }
-    [data-testid="stMetricDelta"] svg { display: none; }
-    h1, h2, h3, h4 { color: #1565C0 !important; font-weight: 700 !important; }
     
-    /* CAIXA DE FILTROS */
-    [data-testid="stExpander"] {
+    /* Ajuste no Delta (Porcentagem dos cards) */
+    [data-testid="stMetricDelta"] > div {
+        background-color: #EFF6FF !important; 
+        color: #1E40AF !important; 
+        border-radius: 6px; 
+        padding: 4px 10px; 
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    /* Estilização dos Expanders (Filtros) */
+    .stExpander {
         background-color: #FFFFFF !important;
-        border: 2px solid #1565C0 !important;
-        border-radius: 8px !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+
+    /* Estilização das Tabelas / Dataframes */
+    .stDataFrame {
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    /* Títulos e Subtítulos */
+    h1 { color: #1E293B !important; font-weight: 700 !important; letter-spacing: -0.02em; }
+    h2, h3, h4 { color: #334155 !important; font-weight: 600 !important; }
+
+    /* Botões */
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s;
     }
     
     /* Títulos dos Filtros e Tags */
@@ -49,10 +98,10 @@ def login():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         st.write("")
-        st.title("🔐 Login de Acesso")
-        u = st.text_input("Login")
+        st.markdown("<h1 style='text-align: center;'>🔐 Acesso ao Sistema</h1>", unsafe_allow_html=True)
+        u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
-        if st.button("Acessar Sistema"):
+        if st.button("Entrar no Dashboard", use_container_width=True):
             if u == "aquisições" and s == "1987":
                 st.session_state.update({'autenticado': True, 'perfil': 'master'})
                 st.rerun()
@@ -60,7 +109,7 @@ def login():
                 st.session_state.update({'autenticado': True, 'perfil': 'operador'})
                 st.rerun()
             else:
-                st.error("Dados incorretos.")
+                st.error("Credenciais inválidas.")
 
 if not st.session_state['autenticado']:
     login()
@@ -72,45 +121,43 @@ else:
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
-        # Datas Críticas
-        df['Data de criação'] = pd.to_datetime(df['Data de criação'], errors='coerce')
-        df['Contato Realizado'] = pd.to_datetime(df['Contato Realizado'], errors='coerce')
-        df['[IS/SDR] Data do Agendamento'] = pd.to_datetime(df['[IS/SDR] Data do Agendamento'], errors='coerce')
-        df['[IS/Closer] Reunião Ocorrida'] = pd.to_datetime(df['[IS/Closer] Reunião Ocorrida'], errors='coerce')
-        df['Data de fechamento'] = pd.to_datetime(df['Data de fechamento'], errors='coerce')
+        colunas_data = ['Data de criação', 'Contato Realizado', '[IS/SDR] Data do Agendamento', 
+                        '[IS/Closer] Reunião Ocorrida', 'Data de fechamento']
+        for col in colunas_data:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
 
-        # Equipe e CS
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
 
-        # --- BARRA LATERAL ---
-        st.sidebar.markdown("<h2 style='color: #1565C0; font-size: 20px;'>Pipeline Principal</h2>", unsafe_allow_html=True)
-        pipeline_selecionado = st.sidebar.selectbox("Selecione a Unidade", ["Aquisições", "Canais"], label_visibility="collapsed")
+        # --- BARRA LATERAL (SIDEBAR) ---
+        st.sidebar.markdown("<h2 style='font-size: 1.2rem; margin-bottom: 0px;'>Pipeline</h2>", unsafe_allow_html=True)
+        pipeline_selecionado = st.sidebar.selectbox("Pipeline", ["Aquisições", "Canais"], label_visibility="collapsed")
         
-        st.sidebar.divider()
+        st.sidebar.markdown("<br><h2 style='font-size: 1.2rem; margin-bottom: 0px;'>Módulos</h2>", unsafe_allow_html=True)
         
-        # Oculta menus para o Marketing (Blindagem de Perfil)
+        # Oculta menus para o Marketing
         if st.session_state['perfil'] == "master":
             menu_opcoes = ["📊 Dashboard Geral", "📦 Visão de Produtos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
             menu_opcoes = ["📊 Dashboard Geral"]
             
-        pagina_selecionada = st.sidebar.radio("Navegação Principal", menu_opcoes, label_visibility="collapsed")
+        pagina_selecionada = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
         
+        st.sidebar.v_spacer(height=20)
         st.sidebar.divider()
-        if st.sidebar.button("Encerrar Sessão"):
+        if st.sidebar.button("🚪 Sair do Sistema", use_container_width=True):
             st.session_state['autenticado'] = False
             st.rerun()
 
         # ==============================================================================
-        # LÓGICA BLINDADA - FILTROS GLOBAIS (COMPARTILHADOS)
+        # LÓGICA BLINDADA - FILTROS GLOBAIS
         # ==============================================================================
-        with st.expander("🔍 FILTROS DO RELATÓRIO", expanded=True):
+        with st.expander("🔍 Parâmetros de Filtro", expanded=True):
             col_esq, col_dir = st.columns(2)
             
             with col_esq:
                 data_min, data_max = df['Data de criação'].dropna().min().date(), df['Data de criação'].dropna().max().date()
-                periodo = st.date_input("Período do Evento", [data_min, data_max])
+                periodo = st.date_input("Período de Análise", [data_min, data_max])
                 
                 lista_tipos = sorted(df["[IS] Tipo de lead"].dropna().unique().tolist())
                 tipos_sel = st.multiselect("Tipo de Lead", lista_tipos, default=lista_tipos)
@@ -162,16 +209,9 @@ else:
             # PÁGINA: DASHBOARD GERAL
             # --------------------------------------------------------------------------
             if pagina_selecionada == "📊 Dashboard Geral":
-                st.title("📊 Dashboard Comercial - Aquisições")
+                st.markdown("### 📈 Performance de Funil: Aquisições")
                 
-                # FUNIL DO PERÍODO
-                st.subheader("📅 Resultados do Período Selecionado")
-                L = mL.sum()
-                C = mC.sum()
-                A = mA.sum()
-                R = mR.sum()
-                F = mF.sum()
-                
+                L, C, A, R, F = mL.sum(), mC.sum(), mA.sum(), mR.sum(), mF.sum()
                 c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Leads", f"{L}")
                 c2.metric("Contato", f"{C}", f"{(C/L*100):.1f}%" if L>0 else "0%")
@@ -181,7 +221,6 @@ else:
 
                 st.divider()
 
-                # TABELAS DE APOIO (MKT)
                 def criar_tabela_mkt(coluna_nome):
                     l_cat = df_base[mL].groupby(coluna_nome).size().reset_index(name='Leads')
                     r_cat = df_base[mR].groupby(coluna_nome).size().reset_index(name='Ocorridos')
@@ -285,7 +324,7 @@ else:
             # PÁGINA: VISÃO DE PRODUTOS
             # --------------------------------------------------------------------------
             elif pagina_selecionada == "📦 Visão de Produtos":
-                st.title("📦 Visão de Produtos - Aquisições")
+                st.markdown("### 📦 Inventário e Conversão de Produtos")
                 
                 total_reunioes = mR.sum()
                 total_clientes = mF.sum()
@@ -316,7 +355,6 @@ else:
                     st.divider()
 
                     st.subheader("📊 Performance por Produto Fechado")
-                    st.info(f"A tabela exibe a relevância de cada produto no faturamento total (**% do Mix**) e a eficácia de venda por reunião (**Conversão vs Reuniões**).")
                     
                     contagem_prod['% do Mix (Total Vendido)'] = contagem_prod['Qtd. Vendida'].apply(
                         lambda x: f"{(x / total_produtos * 100):.1f}%" if total_produtos > 0 else "0.0%"
@@ -339,16 +377,15 @@ else:
                     st.divider()
                     
                     # ==============================================================================
-                    # MATRIZ DE SINERGIA: SDR X CLOSER (Ajustado para mostrar apenas a % de conversão)
+                    # MATRIZ DE SINERGIA: SDR X CLOSER
                     # ==============================================================================
                     st.subheader("🤝 Sinergia da Equipe (Ocorrido x Fechado)")
-                    st.info("A matriz abaixo cruza a taxa de conversão (% de fechamento sobre as reuniões ocorridas) entre os profissionais.")
                     
                     df_sync_r = df_base[mR].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Ocorridos')
                     df_sync_f = df_base[mF].groupby(['Filtro_SDR', 'Filtro_Closer']).size().reset_index(name='Fechados')
                     df_sync = pd.merge(df_sync_r, df_sync_f, on=['Filtro_SDR', 'Filtro_Closer'], how='outer').fillna(0)
                     
-                    # Função limpa: Retorna APENAS a porcentagem de conversão, ou um traço se não houve reunião.
+                    # Formatação % limpa
                     def format_sync_percent_only(row):
                         occ = int(row['Ocorridos'])
                         fec = int(row['Fechados'])
@@ -366,14 +403,14 @@ else:
                     col_mat1, col_mat2 = st.columns(2)
                     
                     with col_mat1:
-                        st.markdown("<h4 style='color: #0D47A1;'>🔄 Visão: SDR por Closer</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='color: #334155;'>🔄 Visão: SDR por Closer</h4>", unsafe_allow_html=True)
                         st.dataframe(pivot_sdr_closer, use_container_width=True)
                         
                     with col_mat2:
-                        st.markdown("<h4 style='color: #0D47A1;'>🔄 Visão: Closer por SDR</h4>", unsafe_allow_html=True)
+                        st.markdown("<h4 style='color: #334155;'>🔄 Visão: Closer por SDR</h4>", unsafe_allow_html=True)
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
                     
-                    # ESPAÇAMENTO INFERIOR PARA MELHOR SCROLL
+                    # Espaçamento inferior para rolagem suave
                     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
                     
                 else:
@@ -383,14 +420,14 @@ else:
             # OUTRAS PÁGINAS
             # --------------------------------------------------------------------------
             else:
-                st.title(f"{pagina_selecionada} - Aquisições")
+                st.markdown(f"### {pagina_selecionada} - Aquisições")
                 st.info("Página em desenvolvimento estrutural.")
 
         # ==============================================================================
         # LÓGICA BLINDADA - CANAIS (PREPARADO PARA NOVO CSV)
         # ==============================================================================
         elif pipeline_selecionado == "Canais":
-            st.title("📊 Dashboard Comercial - Canais")
+            st.markdown("### 📈 Performance de Funil: Canais")
             st.warning("Aguardando importação do arquivo 'bd-canais.csv' para processamento de dados específicos desta unidade.")
 
     except Exception as e:
