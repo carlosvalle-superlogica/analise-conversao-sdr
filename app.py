@@ -120,24 +120,20 @@ else:
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
-        # Datas base
         colunas_data = ['Data de criação', 'Contato Realizado', '[IS/SDR] Data do Agendamento', 
                         '[IS/Closer] Reunião Ocorrida', 'Data de fechamento']
         for col in colunas_data:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
 
-        # Data de Perda Blindada: Usa a Data de Perda específica, ou a Data de Fechamento padrão se estiver vazia
         if '[IS/SDR] Data de Fechamento Perdido' in df.columns:
             df['Data Perda Blindada'] = pd.to_datetime(df['[IS/SDR] Data de Fechamento Perdido'].fillna(df['Data de fechamento']), errors='coerce')
         else:
             df['Data Perda Blindada'] = df['Data de fechamento']
 
-        # Normalização de Equipe
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
         
-        # Normalização de Repescagem (Se vazio = Não)
         if '[Comercial B2B] Repescagem' in df.columns:
             df['Repescagem_Limpa'] = df['[Comercial B2B] Repescagem'].fillna('Não').astype(str).str.strip().str.title()
         else:
@@ -149,7 +145,6 @@ else:
         
         st.sidebar.markdown("<br><h2 style='font-size: 1.1rem; margin-bottom: 5px;'>Módulos</h2>", unsafe_allow_html=True)
         
-        # Controle de Acesso: MKT não vê Perdidos
         if st.session_state['perfil'] == "master":
             menu_opcoes = ["📊 Dashboard Geral", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
@@ -176,7 +171,6 @@ else:
                 origens_sel = st.multiselect("Origem do Lead", sorted(df["[IS] Origem do lead"].dropna().unique().tolist()), default=sorted(df["[IS] Origem do lead"].dropna().unique().tolist()))
                 jornada_sel = st.multiselect("Jornada", sorted(df["[IS] Lead com Jornada:"].dropna().unique().tolist()), default=sorted(df["[IS] Lead com Jornada:"].dropna().unique().tolist()))
             with c3:
-                # O Novo Filtro de Repescagem
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
                 
                 if st.session_state['perfil'] == "master":
@@ -194,7 +188,6 @@ else:
             (df['Filtro_Closer'].isin(closers_sel))
         ].copy()
 
-        # Aplicação do Filtro de Repescagem
         if repescagem_filtro != "Todos":
             df_base = df_base[df_base['Repescagem_Limpa'] == repescagem_filtro]
 
@@ -207,7 +200,6 @@ else:
             mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             
-            # Máscara rigorosa para Perdidos (Olha a Data de Perda e exige que tenha Motivo preenchido)
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
         else:
@@ -220,9 +212,6 @@ else:
         # ==============================================================================
         if pipeline_sel == "Aquisições":
             
-            # --------------------------------------------------------------------------
-            # PÁGINA: DASHBOARD GERAL
-            # --------------------------------------------------------------------------
             if pagina_sel == "📊 Dashboard Geral":
                 st.markdown("### 📈 Performance de Funil: Aquisições")
                 L, C, A, R, F = mL.sum(), mC.sum(), mA.sum(), mR.sum(), mF.sum()
@@ -315,9 +304,6 @@ else:
                             t_cs['L x Fechado %'] = t_cs.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
                             st.dataframe(t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
-            # --------------------------------------------------------------------------
-            # PÁGINA: PRODUTOS / CLOSER'S / VC
-            # --------------------------------------------------------------------------
             elif pagina_sel == "📦 Produtos / Closer's / VC":
                 st.markdown("### 📦 Produtos / Closer's / VC")
                 tR, tF = mR.sum(), mF.sum()
@@ -368,36 +354,60 @@ else:
                     with col_mat2:
                         st.markdown("<h4 style='color: #334155;'>🔄 Visão: Closer por SDR</h4>", unsafe_allow_html=True)
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
-                    
-                    st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS (NOVA LÓGICA)
+            # PÁGINA: ❌ PERDIDOS
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas")
                 
                 df_perdidos = df_base[mP].copy()
                 total_perdas = len(df_perdidos)
+                total_recebidos = mL.sum() # Total de leads gerados/recebidos no período
                 
                 if total_perdas > 0:
-                    # Regra de Responsabilidade (Vazio = SDR, Preenchido = Closer)
                     df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida'].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
                     
-                    qtd_sdr = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'SDR'])
-                    qtd_closer = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'Closer'])
+                    # ==========================================
+                    # 0. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS/LIXO)
+                    # ==========================================
+                    st.markdown("<h4 style='color: #B91C1C; margin-top: 10px;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
+                    st.info("Mede o impacto de leads que chegaram ao funil, mas não puderam ser trabalhados pelo SDR por problemas de qualificação ou contato.")
                     
-                    # Métricas Superiores
-                    cp1, cp2, cp3 = st.columns(3)
-                    cp1.metric("Total de Leads Perdidos", f"{total_perdas}")
-                    cp2.metric("Perdas SDR (Pré-Reunião)", f"{qtd_sdr}", f"{(qtd_sdr/total_perdas*100):.1f}%" if total_perdas>0 else "0%", delta_color="off")
-                    cp3.metric("Perdas Closer (Pós-Reunião)", f"{qtd_closer}", f"{(qtd_closer/total_perdas*100):.1f}%" if total_perdas>0 else "0%", delta_color="off")
+                    motivos_lixo = ['Sem contato', 'Dados inconsistentes', 'Desqualificado', 'Contato duplicado']
+                    df_lixo = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'].isin(motivos_lixo)]
+                    total_lixo = len(df_lixo)
+                    
+                    pct_sobre_recebidos = (total_lixo / total_recebidos * 100) if total_recebidos > 0 else 0
+                    pct_sobre_perdidos = (total_lixo / total_perdas * 100) if total_perdas > 0 else 0
+                    
+                    c_lx1, c_lx2, c_lx3 = st.columns(3)
+                    c_lx1.metric("Leads Inválidos (Desperdício)", f"{total_lixo}")
+                    c_lx2.metric("% Sobre Leads Recebidos (Verba)", f"{pct_sobre_recebidos:.1f}%", "Impacto no Custo MKT", delta_color="inverse")
+                    c_lx3.metric("% Sobre Leads Perdidos", f"{pct_sobre_perdidos:.1f}%", delta_color="off")
+                    
+                    if total_lixo > 0:
+                        tabela_lixo = df_lixo['Motivo de Fechamento Perdido'].value_counts().reset_index()
+                        tabela_lixo.columns = ['Motivo (Inválido)', 'Quantidade']
+                        
+                        col_tb_lx, _ = st.columns([5, 5])
+                        with col_tb_lx:
+                            st.dataframe(tabela_lixo, use_container_width=True, hide_index=True)
                     
                     st.divider()
 
                     # ==========================================
                     # 1. MAIOR MOTIVO GERAL
                     # ==========================================
+                    qtd_sdr = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'SDR'])
+                    qtd_closer = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'Closer'])
+                    
+                    cp1, cp2, cp3 = st.columns(3)
+                    cp1.metric("Total de Leads Perdidos", f"{total_perdas}")
+                    cp2.metric("Perdas SDR (Pré-Reunião)", f"{qtd_sdr}", f"{(qtd_sdr/total_perdas*100):.1f}%" if total_perdas>0 else "0%", delta_color="off")
+                    cp3.metric("Perdas Closer (Pós-Reunião)", f"{qtd_closer}", f"{(qtd_closer/total_perdas*100):.1f}%" if total_perdas>0 else "0%", delta_color="off")
+                    
+                    st.write("")
                     st.subheader("🏆 Maior Motivo de Perda (Geral)")
                     motivos_gerais = df_perdidos['Motivo de Fechamento Perdido'].value_counts().reset_index()
                     motivos_gerais.columns = ['Motivo', 'Quantidade']
@@ -416,7 +426,6 @@ else:
                     st.info("Abaixo você analisa os motivos sem focar em nomes, mas sim na fase do funil.")
                     
                     col_p1, col_p2 = st.columns(2)
-                    
                     with col_p1:
                         st.markdown("<h4 style='color: #1E40AF;'>📉 Perdas SDR (Não chegaram na mesa)</h4>", unsafe_allow_html=True)
                         df_sdr_perdas = df_perdidos[df_perdidos['Responsavel_Papel'] == 'SDR']
@@ -445,13 +454,10 @@ else:
                     # 3. MAIOR MOTIVO POR ORIGEM DE LEAD
                     # ==========================================
                     st.subheader("📍 Análise Cruzada: Origem x Motivo de Perda")
-                    st.info("A matriz abaixo exibe o volume de perdas cruzando a Origem de Marketing com o Motivo de Perda (Ordenado pelas origens que mais perdem).")
+                    st.info("A matriz abaixo exibe o volume de perdas cruzando a Origem de Marketing com o Motivo.")
                     
-                    # Cria tabela cruzada
                     pivot_origem = pd.crosstab(df_perdidos['[IS] Origem do lead'], df_perdidos['Motivo de Fechamento Perdido'], margins=True, margins_name='Total (Todas as Origens)')
-                    # Ordena do maior para o menor com base na coluna de Total
                     pivot_origem = pivot_origem.sort_values('Total (Todas as Origens)', ascending=False)
-                    
                     st.dataframe(pivot_origem, use_container_width=True)
 
                     st.divider()
@@ -466,16 +472,12 @@ else:
                     st.dataframe(df_perdidos[col_auditoria].fillna('-').rename(columns={'Responsavel_Papel': 'Responsável Pela Perda', 'Repescagem_Limpa': 'É Repescagem?'}), use_container_width=True, hide_index=True)
                     
                     st.markdown("<br><br><br>", unsafe_allow_html=True)
-                    
                 else:
                     st.warning("🎉 Excelente! Não há nenhum lead perdido para o período e filtros selecionados.")
 
-        # ==============================================================================
-        # LÓGICA BLINDADA - CANAIS
-        # ==============================================================================
         elif pipeline_sel == "Canais":
             st.markdown("### 📈 Performance de Funil: Canais")
-            st.warning("Aguardando importação do ficheiro 'bd-canais.csv' para processamento de dados específicos desta unidade.")
+            st.warning("Aguardando importação do ficheiro 'bd-canais.csv' para processamento.")
 
     except Exception as e:
         st.error(f"Erro no processamento: {e}")
