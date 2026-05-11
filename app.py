@@ -381,23 +381,30 @@ else:
                     pct_sobre_recebidos = (total_lixo / total_recebidos * 100) if total_recebidos > 0 else 0
                     pct_sobre_perdidos = (total_lixo / total_perdas * 100) if total_perdas > 0 else 0
                     
-                    c_lx1, c_lx2, c_lx3 = st.columns(3)
-                    c_lx1.metric("Leads Inválidos (Desperdício)", f"{total_lixo}")
-                    c_lx2.metric("% Sobre Recebidos (Custo MKT)", f"{pct_sobre_recebidos:.1f}%", delta_color="inverse")
-                    c_lx3.metric("% Sobre Perdidos", f"{pct_sobre_perdidos:.1f}%", delta_color="off")
-                    
                     if total_lixo > 0:
                         tabela_lixo = df_lixo['Motivo de Fechamento Perdido'].value_counts().reset_index()
                         tabela_lixo.columns = ['Motivo (Inválido)', 'Quantidade']
                         
-                        # Adicionando as visões solicitadas
                         tabela_lixo['% sobre Todos os Recebidos'] = tabela_lixo['Quantidade'].apply(lambda x: f"{(x / total_recebidos * 100):.1f}%" if total_recebidos > 0 else "0.0%")
                         tabela_lixo['% sobre Todos os Perdidos'] = tabela_lixo['Quantidade'].apply(lambda x: f"{(x / total_perdas * 100):.1f}%" if total_perdas > 0 else "0.0%")
                         
-                        # Layout centralizado e reduzido usando colunas proporcionais
+                        # Linha do Total Acumulado
+                        linha_total = pd.DataFrame([{
+                            'Motivo (Inválido)': '🚨 TOTAL ACUMULADO',
+                            'Quantidade': total_lixo,
+                            '% sobre Todos os Recebidos': f"{pct_sobre_recebidos:.1f}%",
+                            '% sobre Todos os Perdidos': f"{pct_sobre_perdidos:.1f}%"
+                        }])
+                        tabela_lixo = pd.concat([tabela_lixo, linha_total], ignore_index=True)
+                        
+                        # Centralizando os dados nas células usando Pandas Styler
+                        tabela_estilizada = tabela_lixo.style.set_properties(**{'text-align': 'center'})
+                        tabela_estilizada = tabela_estilizada.set_table_styles([dict(selector='th', props=[('text-align', 'center')])])
+                        
                         col_vazia1, col_tabela_central, col_vazia2 = st.columns([1.5, 7, 1.5])
                         with col_tabela_central:
-                            st.dataframe(tabela_lixo, use_container_width=True, hide_index=True)
+                            st.dataframe(tabela_estilizada, use_container_width=True, hide_index=True)
+                            st.caption(f"<div style='text-align: center; color: #334155; font-size: 0.95rem;'><b>Insight de Negócio:</b> Dos {total_recebidos} leads recebidos, <b>{pct_sobre_recebidos:.1f}%</b> foram descartados por falta de contato ou qualificação inicial. Isso significa que o time comercial pôde atuar de verdade em apenas {100-pct_sobre_recebidos:.1f}% da base.</div>", unsafe_allow_html=True)
                     
                     st.divider()
 
