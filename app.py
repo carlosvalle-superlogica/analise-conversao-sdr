@@ -371,8 +371,8 @@ else:
                     # ==========================================
                     # 0. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS/LIXO)
                     # ==========================================
-                    st.markdown("<h4 style='color: #B91C1C; margin-top: 10px;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
-                    st.info("Mede o impacto de leads que chegaram ao funil, mas não puderam ser trabalhados pelo SDR por problemas de qualificação ou contato.")
+                    st.markdown("<h4 style='color: #B91C1C; margin-top: 10px; text-align: center;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
+                    st.markdown("<p style='text-align: center; color: #475569;'>Mede o impacto de leads que chegaram ao funil, mas não puderam ser trabalhados pelo SDR por problemas de qualificação ou contato.</p>", unsafe_allow_html=True)
                     
                     motivos_lixo = ['Sem contato', 'Dados inconsistentes', 'Desqualificado', 'Contato duplicado']
                     df_lixo = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'].isin(motivos_lixo)]
@@ -383,15 +383,20 @@ else:
                     
                     c_lx1, c_lx2, c_lx3 = st.columns(3)
                     c_lx1.metric("Leads Inválidos (Desperdício)", f"{total_lixo}")
-                    c_lx2.metric("% Sobre Leads Recebidos (Verba)", f"{pct_sobre_recebidos:.1f}%", "Impacto no Custo MKT", delta_color="inverse")
-                    c_lx3.metric("% Sobre Leads Perdidos", f"{pct_sobre_perdidos:.1f}%", delta_color="off")
+                    c_lx2.metric("% Sobre Recebidos (Custo MKT)", f"{pct_sobre_recebidos:.1f}%", delta_color="inverse")
+                    c_lx3.metric("% Sobre Perdidos", f"{pct_sobre_perdidos:.1f}%", delta_color="off")
                     
                     if total_lixo > 0:
                         tabela_lixo = df_lixo['Motivo de Fechamento Perdido'].value_counts().reset_index()
                         tabela_lixo.columns = ['Motivo (Inválido)', 'Quantidade']
                         
-                        col_tb_lx, _ = st.columns([5, 5])
-                        with col_tb_lx:
+                        # Adicionando as visões solicitadas
+                        tabela_lixo['% sobre Todos os Recebidos'] = tabela_lixo['Quantidade'].apply(lambda x: f"{(x / total_recebidos * 100):.1f}%" if total_recebidos > 0 else "0.0%")
+                        tabela_lixo['% sobre Todos os Perdidos'] = tabela_lixo['Quantidade'].apply(lambda x: f"{(x / total_perdas * 100):.1f}%" if total_perdas > 0 else "0.0%")
+                        
+                        # Layout centralizado e reduzido usando colunas proporcionais
+                        col_vazia1, col_tabela_central, col_vazia2 = st.columns([1.5, 7, 1.5])
+                        with col_tabela_central:
                             st.dataframe(tabela_lixo, use_container_width=True, hide_index=True)
                     
                     st.divider()
