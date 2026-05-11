@@ -101,7 +101,7 @@ def login():
         u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
         if st.button("Entrar no Dashboard", use_container_width=True):
-            if u == "aquisições" and s == "1987":
+            if u == "aquisições" and s == "2024":
                 st.session_state.update({'autenticado': True, 'perfil': 'master'})
                 st.rerun()
             elif u == "mkt" and s == "123":
