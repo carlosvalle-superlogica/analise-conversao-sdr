@@ -118,11 +118,11 @@ if not st.session_state['autenticado']:
 else:
     try:
         # ==============================================================================
-        # FUNÇÃO MATEMÁTICA DE FORMATAÇÃO DE TEMPO
+        # FUNÇÃO MATEMÁTICA DE FORMATAÇÃO DE TEMPO (DIAS, HORAS, MIN)
         # ==============================================================================
         def formata_tempo(td):
             if pd.isna(td): return "Sem dados"
-            dias = td.days
+            dias = td.components.days
             horas = td.components.hours
             minutos = td.components.minutes
             partes = []
@@ -137,9 +137,9 @@ else:
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
-        # Busca segura de colunas problemáticas no CSV (que contém aspas duplas)
-        col_1_contato = next((col for col in df.columns if '1º Contato' in col), None)
-        col_perdido_ent = next((col for col in df.columns if 'Perdidos (Comercial' in col), None)
+        # Busca infalível de colunas problemáticas (ignora caracteres especiais)
+        col_1_contato = next((col for col in df.columns if '1' in col and 'Contato' in col and 'B2B' in col), None)
+        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
             'Data de criação', 
@@ -168,6 +168,7 @@ else:
         # --- ENGENHARIA DE TEMPO (TMA E PERSISTÊNCIA EM TIMEDELTA) ---
         if col_1_contato and 'Data de criação' in df.columns:
             df['TMA_Timedelta'] = df[col_1_contato] - df['Data de criação']
+            # Mantém apenas diferenças positivas para evitar anomalias do CRM
             df['TMA_Timedelta'] = df['TMA_Timedelta'].where(df['TMA_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
         else:
             df['TMA_Timedelta'] = pd.NaT
@@ -409,7 +410,7 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS (COM ANAMNESE TEMPORAL EXATA)
+            # PÁGINA: ❌ PERDIDOS (COM ANAMNESE TEMPORAL CORRIGIDA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
@@ -436,15 +437,15 @@ else:
                     
                     ct1, ct2 = st.columns(2)
                     ct1.metric(
-                        "TMA Médio (Data de Criação ➔ Data 1º Contato)", 
+                        "TMA Médio (Data de Criação ➔ Data do 1º Contato)", 
                         formata_tempo(tma_medio_td), 
-                        "Velocidade de resposta do time (Speed-to-lead)", 
+                        "Velocidade média de resposta do time (Speed-to-lead)", 
                         delta_color="off"
                     )
                     ct2.metric(
-                        "Permanência no Funil (APENAS leads 'Sem Contato')", 
+                        "Permanência Média (Apenas leads 'Sem Contato')", 
                         formata_tempo(perm_media_td), 
-                        "Data Criação ➔ Data Perdido (Mede a persistência do time)", 
+                        "Data de Criação ➔ Data de Perdido (Mede a insistência antes de descartar)", 
                         delta_color="off"
                     )
                     
@@ -543,8 +544,8 @@ else:
                     df_perdidos['TMA do Lead'] = df_perdidos['TMA_Timedelta'].apply(formata_tempo)
                     df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta'].apply(formata_tempo)
                     
-                    col_auditoria = ['Nome do negócio', 'Responsavel_Papel', 'TMA do Lead', 'Tempo no Funil', 'Motivo de Fechamento Perdido', 'Motivo de Fechamento Perdido (Sub-motivo)', 'Descrição de fechamento perdido']
-                    st.dataframe(df_perdidos[col_auditoria].fillna('-').rename(columns={'Responsavel_Papel': 'Responsável Pela Perda'}), use_container_width=True, hide_index=True)
+                    col_auditoria = ['Nome do negócio', 'Responsavel_Papel', 'TMA do Lead', 'Tempo no Funil', 'Motivo de Fechamento Perdido', 'Motivo de Fechamento Perdido (Sub-motivo)', 'Descrição de fechamento perdido', 'Repescagem_Limpa']
+                    st.dataframe(df_perdidos[col_auditoria].fillna('-').rename(columns={'Responsavel_Papel': 'Responsável Pela Perda', 'Repescagem_Limpa': 'É Repescagem?'}), use_container_width=True, hide_index=True)
                     
                     st.markdown("<br><br><br>", unsafe_allow_html=True)
                 else:
