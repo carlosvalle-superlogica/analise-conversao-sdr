@@ -122,14 +122,20 @@ else:
         # ==============================================================================
         def formata_tempo(td):
             if pd.isna(td): return "Sem dados"
-            dias = int(td.components.days)
-            horas = int(td.components.hours)
-            minutos = int(td.components.minutes)
-            partes = []
-            if dias > 0: partes.append(f"{dias} dias")
-            if horas > 0: partes.append(f"{horas} horas")
-            if minutos > 0 or (dias == 0 and horas == 0): partes.append(f"{minutos} min")
-            return ", ".join(partes)
+            try:
+                total_segundos = int(td.total_seconds())
+                if total_segundos < 0: return "Sem dados"
+                dias = total_segundos // 86400
+                horas = (total_segundos % 86400) // 3600
+                minutos = (total_segundos % 3600) // 60
+                
+                partes = []
+                if dias > 0: partes.append(f"{dias} dias")
+                if horas > 0: partes.append(f"{horas} horas")
+                if minutos > 0 or not partes: partes.append(f"{minutos} min")
+                return ", ".join(partes)
+            except:
+                return "Sem dados"
 
         # ==============================================================================
         # CARREGAMENTO E ENGENHARIA DE DADOS
@@ -137,17 +143,17 @@ else:
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
-        # Busca infalível da coluna de 1º contato (cobrindo aspas e caracteres)
-        col_1_contato = None
-        for col in df.columns:
-            if '1º Contato' in col or '1o Contato' in col or '1° Contato' in col:
-                col_1_contato = col
-                break
-                
+        # Nomes exatos das propriedades
+        col_criacao = 'Data de criação'
+        col_1_contato = 'Date entered "1º Contato (Comercial B2B)"'
+        if col_1_contato not in df.columns:
+            # Fallback seguro caso o export mude as aspas
+            col_1_contato = next((col for col in df.columns if '1º Contato' in col), None)
+            
         col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
-            'Data de criação', 
+            col_criacao, 
             'Contato Realizado', 
             '[IS/SDR] Data do Agendamento', 
             '[IS/Closer] Reunião Ocorrida', 
@@ -158,7 +164,7 @@ else:
         if col_1_contato: colunas_data.append(col_1_contato)
         if col_perdido_ent: colunas_data.append(col_perdido_ent)
         
-        # Conversão bruta para Datetime
+        # Conversão para Datetime
         for col in colunas_data:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
@@ -171,14 +177,14 @@ else:
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
         # --- ENGENHARIA DE TEMPO (TMA E PERSISTÊNCIA EM TIMEDELTA) ---
-        if col_1_contato and 'Data de criação' in df.columns:
-            df['TMA_Timedelta'] = df[col_1_contato] - df['Data de criação']
+        if col_1_contato and col_criacao in df.columns:
+            df['TMA_Timedelta'] = df[col_1_contato] - df[col_criacao]
             df['TMA_Timedelta'] = df['TMA_Timedelta'].where(df['TMA_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
         else:
             df['TMA_Timedelta'] = pd.NaT
 
-        if col_perdido_ent and 'Data de criação' in df.columns:
-            df['Perm_Timedelta'] = df[col_perdido_ent] - df['Data de criação']
+        if col_perdido_ent and col_criacao in df.columns:
+            df['Perm_Timedelta'] = df[col_perdido_ent] - df[col_criacao]
             df['Perm_Timedelta'] = df['Perm_Timedelta'].where(df['Perm_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
         else:
             df['Perm_Timedelta'] = pd.NaT
@@ -431,25 +437,25 @@ else:
                     # ==========================================
                     st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
                     
-                    # TMA dos leads CRIADOS no período (Speed-to-lead real da operação)
-                    df_criados = df_base[mL]
-                    tma_medio_td = df_criados['TMA_Timedelta'].mean()
+                    # LÓGICA DE TMA: Apenas leads do período filtrado que tenham Criação E 1º Contato preenchidos
+                    df_tma_validos = df_base[df_base['Data de criação'].notna() & df_base[col_1_contato].notna()]
+                    tma_medio_td = df_tma_validos['TMA_Timedelta'].mean()
                     
-                    # Permanência APENAS para os leads PERDIDOS por 'Sem Contato'
+                    # LÓGICA DE PERMANÊNCIA: Apenas leads perdidos por 'Sem Contato'
                     df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
                     perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean()
                     
                     ct1, ct2 = st.columns(2)
                     ct1.metric(
-                        "TMA Médio (Data de Criação ➔ Data do 1º Contato)", 
+                        "TMA Médio (Criação ➔ 1º Contato)", 
                         formata_tempo(tma_medio_td), 
-                        "Média de todos os leads criados no período", 
+                        "Média de todos os leads válidos filtrados (Ganhos/Perdidos)", 
                         delta_color="off"
                     )
                     ct2.metric(
-                        "Permanência no Funil (APENAS leads 'Sem Contato')", 
+                        "Tempo de Funil (APENAS leads 'Sem Contato')", 
                         formata_tempo(perm_media_td), 
-                        "Data Criação ➔ Data Perdido (Mede a persistência do time)", 
+                        "Criação ➔ Perdido (Mede a persistência no lead)", 
                         delta_color="off"
                     )
                     
@@ -544,7 +550,6 @@ else:
                     st.subheader("🔍 Auditoria de Textos, Sub-motivos e Tempos Operacionais")
                     st.markdown("Examine cada lead para validar o tempo de resposta, o tempo de persistência e as anotações do time.")
                     
-                    # Convertendo as colunas de tempo na tabela para texto humano legível
                     df_perdidos['TMA do Lead'] = df_perdidos['TMA_Timedelta'].apply(formata_tempo)
                     df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta'].apply(formata_tempo)
                     
