@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # ==============================================================================
-# ESTRUTURA BLINDADA - CONFIGURAÇÃO E ESTILO (DESIGN DE SISTEMA PREMIUM)
+# ESTRUTURA BLINDADA - CONFIGURAÇÃO E ESTILO (DESIGN PREMIUM)
 # ==============================================================================
 st.set_page_config(page_title="Sistema de Gestão Comercial", layout="wide")
 
@@ -26,7 +27,6 @@ st.markdown("""
         box-shadow: 4px 0px 15px rgba(0,0,0,0.03);
     }
 
-    /* MENU LATERAL EM CAIXAS/BOTÕES */
     [data-testid="stSidebar"] div[role="radiogroup"] > label {
         background-color: #FFFFFF !important;
         border: 1px solid #E2E8F0 !important;
@@ -74,6 +74,9 @@ st.markdown("""
     }
 
     .stDataFrame { border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; }
+    
+    /* Centralização de células e cabeçalhos nas tabelas do Pandas */
+    .stDataFrame td, .stDataFrame th { text-align: center !important; }
 
     h1 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.025em; }
     h2 { color: #1E293B !important; font-weight: 700 !important; letter-spacing: -0.02em; }
@@ -115,22 +118,47 @@ if not st.session_state['autenticado']:
 else:
     try:
         # ==============================================================================
-        # CARREGAMENTO E TRATAMENTO DE DADOS (LÓGICA BLINDADA)
+        # CARREGAMENTO E ENGENHARIA DE DADOS (COM NOVA LÓGICA DE TEMPO)
         # ==============================================================================
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
-        colunas_data = ['Data de criação', 'Contato Realizado', '[IS/SDR] Data do Agendamento', 
-                        '[IS/Closer] Reunião Ocorrida', 'Data de fechamento']
+        colunas_data = [
+            'Data de criação', 
+            'Contato Realizado', 
+            '[IS/SDR] Data do Agendamento', 
+            '[IS/Closer] Reunião Ocorrida', 
+            'Data de fechamento',
+            '[IS/SDR] Data de Fechamento Perdido',
+            'Date entered "1º Contato (Comercial B2B)"',
+            'Date entered "Perdidos (Comercial B2B)"'
+        ]
+        
         for col in colunas_data:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
 
+        # Data Perda Blindada
         if '[IS/SDR] Data de Fechamento Perdido' in df.columns:
-            df['Data Perda Blindada'] = pd.to_datetime(df['[IS/SDR] Data de Fechamento Perdido'].fillna(df['Data de fechamento']), errors='coerce')
+            df['Data Perda Blindada'] = df['[IS/SDR] Data de Fechamento Perdido'].fillna(df['Data de fechamento'])
         else:
             df['Data Perda Blindada'] = df['Data de fechamento']
+        df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
+        # Engenharia de Tempo (TMA e Permanência)
+        if 'Date entered "1º Contato (Comercial B2B)"' in df.columns and 'Data de criação' in df.columns:
+            df['TMA_Minutos'] = (df['Date entered "1º Contato (Comercial B2B)"'] - df['Data de criação']).dt.total_seconds() / 60.0
+            df['TMA_Minutos'] = df['TMA_Minutos'].apply(lambda x: x if x >= 0 else np.nan)
+        else:
+            df['TMA_Minutos'] = np.nan
+
+        if 'Date entered "Perdidos (Comercial B2B)"' in df.columns and 'Data de criação' in df.columns:
+            df['Permanencia_Dias'] = (df['Date entered "Perdidos (Comercial B2B)"'] - df['Data de criação']).dt.total_seconds() / 86400.0
+            df['Permanencia_Dias'] = df['Permanencia_Dias'].apply(lambda x: x if x >= 0 else np.nan)
+        else:
+            df['Permanencia_Dias'] = np.nan
+
+        # Normalizações Qualitativas
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
         
@@ -172,7 +200,6 @@ else:
                 jornada_sel = st.multiselect("Jornada", sorted(df["[IS] Lead com Jornada:"].dropna().unique().tolist()), default=sorted(df["[IS] Lead com Jornada:"].dropna().unique().tolist()))
             with c3:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
-                
                 if st.session_state['perfil'] == "master":
                     sdrs_sel = st.multiselect("SDR", sorted(df['Filtro_SDR'].unique().tolist()), default=sorted(df['Filtro_SDR'].unique().tolist()))
                     closers_sel = st.multiselect("Closer", sorted(df['Filtro_Closer'].unique().tolist()), default=sorted(df['Filtro_Closer'].unique().tolist()))
@@ -212,6 +239,9 @@ else:
         # ==============================================================================
         if pipeline_sel == "Aquisições":
             
+            # --------------------------------------------------------------------------
+            # PÁGINA: DASHBOARD GERAL
+            # --------------------------------------------------------------------------
             if pagina_sel == "📊 Dashboard Geral":
                 st.markdown("### 📈 Performance de Funil: Aquisições")
                 L, C, A, R, F = mL.sum(), mC.sum(), mA.sum(), mR.sum(), mF.sum()
@@ -304,6 +334,9 @@ else:
                             t_cs['L x Fechado %'] = t_cs.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads']>0 else "0%", axis=1)
                             st.dataframe(t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
 
+            # --------------------------------------------------------------------------
+            # PÁGINA: PRODUTOS / CLOSER'S / VC
+            # --------------------------------------------------------------------------
             elif pagina_sel == "📦 Produtos / Closer's / VC":
                 st.markdown("### 📦 Produtos / Closer's / VC")
                 tR, tF = mR.sum(), mF.sum()
@@ -356,39 +389,55 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS
+            # PÁGINA: ❌ PERDIDOS (COM NOVA ANAMNESE COMPLETA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
-                st.markdown("### ❌ Gestão Estratégica de Perdas")
+                st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
                 
                 df_perdidos = df_base[mP].copy()
                 total_perdas = len(df_perdidos)
-                total_recebidos = mL.sum() # Total de leads gerados/recebidos no período
+                total_recebidos = mL.sum() 
                 
                 if total_perdas > 0:
                     df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida'].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
                     
                     # ==========================================
-                    # 0. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS/LIXO)
+                    # 0. ANÁLISE DE TEMPO (SPEED-TO-LEAD E PERSISTÊNCIA)
+                    # ==========================================
+                    st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo e Persistência</h4>", unsafe_allow_html=True)
+                    st.info("Métricas baseadas nos leads criados no período filtrado. Avalia a velocidade de resposta (TMA) e quanto tempo o lead fica no funil antes de ser descartado.")
+                    
+                    df_criados = df_base[mL]
+                    tma_medio = df_criados['TMA_Minutos'].mean()
+                    perm_media = df_perdidos['Permanencia_Dias'].mean()
+                    taxa_contato_geral = (mC.sum() / total_recebidos * 100) if total_recebidos > 0 else 0
+                    
+                    ct1, ct2, ct3 = st.columns(3)
+                    ct1.metric("TMA Médio (Speed-to-lead)", f"{tma_medio:.0f} minutos" if pd.notna(tma_medio) else "N/D", delta_color="inverse")
+                    ct2.metric("Permanência Média no Funil", f"{perm_media:.1f} dias" if pd.notna(perm_media) else "N/D", "Tempo de trabalho antes da perda", delta_color="off")
+                    ct3.metric("Taxa de Contato Geral", f"{taxa_contato_geral:.1f}%")
+                    
+                    st.divider()
+
+                    # ==========================================
+                    # 1. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS/LIXO)
                     # ==========================================
                     st.markdown("<h4 style='color: #B91C1C; margin-top: 10px; text-align: center;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
-                    st.markdown("<p style='text-align: center; color: #475569;'>Mede o impacto de leads que chegaram ao funil, mas não puderam ser trabalhados pelo SDR por problemas de qualificação ou contato.</p>", unsafe_allow_html=True)
                     
                     motivos_lixo = ['Sem contato', 'Dados inconsistentes', 'Desqualificado', 'Contato duplicado']
                     df_lixo = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'].isin(motivos_lixo)]
                     total_lixo = len(df_lixo)
                     
-                    pct_sobre_recebidos = (total_lixo / total_recebidos * 100) if total_recebidos > 0 else 0
-                    pct_sobre_perdidos = (total_lixo / total_perdas * 100) if total_perdas > 0 else 0
-                    
                     if total_lixo > 0:
+                        pct_sobre_recebidos = (total_lixo / total_recebidos * 100) if total_recebidos > 0 else 0
+                        pct_sobre_perdidos = (total_lixo / total_perdas * 100) if total_perdas > 0 else 0
+                        
                         tabela_lixo = df_lixo['Motivo de Fechamento Perdido'].value_counts().reset_index()
                         tabela_lixo.columns = ['Motivo (Inválido)', 'Quantidade']
                         
                         tabela_lixo['% sobre Todos os Recebidos'] = tabela_lixo['Quantidade'].apply(lambda x: f"{(x / total_recebidos * 100):.1f}%" if total_recebidos > 0 else "0.0%")
                         tabela_lixo['% sobre Todos os Perdidos'] = tabela_lixo['Quantidade'].apply(lambda x: f"{(x / total_perdas * 100):.1f}%" if total_perdas > 0 else "0.0%")
                         
-                        # Linha do Total Acumulado
                         linha_total = pd.DataFrame([{
                             'Motivo (Inválido)': '🚨 TOTAL ACUMULADO',
                             'Quantidade': total_lixo,
@@ -397,9 +446,7 @@ else:
                         }])
                         tabela_lixo = pd.concat([tabela_lixo, linha_total], ignore_index=True)
                         
-                        # Centralizando os dados nas células usando Pandas Styler
                         tabela_estilizada = tabela_lixo.style.set_properties(**{'text-align': 'center'})
-                        tabela_estilizada = tabela_estilizada.set_table_styles([dict(selector='th', props=[('text-align', 'center')])])
                         
                         col_vazia1, col_tabela_central, col_vazia2 = st.columns([1.5, 7, 1.5])
                         with col_tabela_central:
@@ -409,7 +456,7 @@ else:
                     st.divider()
 
                     # ==========================================
-                    # 1. MAIOR MOTIVO GERAL
+                    # 2. MAIOR MOTIVO GERAL E POR PAPEL
                     # ==========================================
                     qtd_sdr = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'SDR'])
                     qtd_closer = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'Closer'])
@@ -420,22 +467,7 @@ else:
                     cp3.metric("Perdas Closer (Pós-Reunião)", f"{qtd_closer}", f"{(qtd_closer/total_perdas*100):.1f}%" if total_perdas>0 else "0%", delta_color="off")
                     
                     st.write("")
-                    st.subheader("🏆 Maior Motivo de Perda (Geral)")
-                    motivos_gerais = df_perdidos['Motivo de Fechamento Perdido'].value_counts().reset_index()
-                    motivos_gerais.columns = ['Motivo', 'Quantidade']
-                    motivos_gerais['% do Total de Perdas'] = motivos_gerais['Quantidade'].apply(lambda x: f"{(x/total_perdas*100):.1f}%")
-                    
-                    col_g1, col_g2 = st.columns([6, 4])
-                    with col_g1:
-                        st.dataframe(motivos_gerais, use_container_width=True, hide_index=True)
-                    
-                    st.divider()
-
-                    # ==========================================
-                    # 2. SEPARAÇÃO POR PAPEL (SDR VS CLOSER)
-                    # ==========================================
-                    st.subheader("⚖️ Motivos Separados por Papel na Equipe")
-                    st.info("Abaixo você analisa os motivos sem focar em nomes, mas sim na fase do funil.")
+                    st.subheader("⚖️ Motivos de Perda por Papel na Equipe")
                     
                     col_p1, col_p2 = st.columns(2)
                     with col_p1:
@@ -446,8 +478,6 @@ else:
                             m_sdr.columns = ['Motivo', 'Quantidade']
                             m_sdr['%'] = m_sdr['Quantidade'].apply(lambda x: f"{(x/qtd_sdr*100):.1f}%")
                             st.dataframe(m_sdr, use_container_width=True, hide_index=True)
-                        else:
-                            st.write("Sem perdas de responsabilidade do SDR neste filtro.")
                             
                     with col_p2:
                         st.markdown("<h4 style='color: #1E40AF;'>📉 Perdas Closer (Ocorreu Reunião)</h4>", unsafe_allow_html=True)
@@ -457,13 +487,11 @@ else:
                             m_closer.columns = ['Motivo', 'Quantidade']
                             m_closer['%'] = m_closer['Quantidade'].apply(lambda x: f"{(x/qtd_closer*100):.1f}%")
                             st.dataframe(m_closer, use_container_width=True, hide_index=True)
-                        else:
-                            st.write("Sem perdas de responsabilidade do Closer neste filtro.")
 
                     st.divider()
 
                     # ==========================================
-                    # 3. MAIOR MOTIVO POR ORIGEM DE LEAD
+                    # 3. ANÁLISE CRUZADA: ORIGEM X MOTIVO
                     # ==========================================
                     st.subheader("📍 Análise Cruzada: Origem x Motivo de Perda")
                     st.info("A matriz abaixo exibe o volume de perdas cruzando a Origem de Marketing com o Motivo.")
@@ -475,13 +503,15 @@ else:
                     st.divider()
 
                     # ==========================================
-                    # 4. AUDITORIA QUALITATIVA
+                    # 4. AUDITORIA QUALITATIVA (COM DIAS NO FUNIL)
                     # ==========================================
-                    st.subheader("🔍 Auditoria de Textos e Sub-motivos")
-                    st.markdown("Leia as anotações do time para entender o verdadeiro motivo humano das perdas.")
+                    st.subheader("🔍 Auditoria de Textos, Sub-motivos e Tempo de Funil")
+                    st.markdown("Examine cada lead para validar o tempo de trabalho antes do descarte e as anotações do time.")
                     
-                    col_auditoria = ['Nome do negócio', 'Responsavel_Papel', 'Motivo de Fechamento Perdido', 'Motivo de Fechamento Perdido (Sub-motivo)', 'Descrição de fechamento perdido', 'Repescagem_Limpa']
-                    st.dataframe(df_perdidos[col_auditoria].fillna('-').rename(columns={'Responsavel_Papel': 'Responsável Pela Perda', 'Repescagem_Limpa': 'É Repescagem?'}), use_container_width=True, hide_index=True)
+                    df_perdidos['Dias no Funil'] = df_perdidos['Permanencia_Dias'].apply(lambda x: f"{x:.1f} dias" if pd.notna(x) else "-")
+                    
+                    col_auditoria = ['Nome do negócio', 'Responsavel_Papel', 'Dias no Funil', 'Motivo de Fechamento Perdido', 'Motivo de Fechamento Perdido (Sub-motivo)', 'Descrição de fechamento perdido', 'Repescagem_Limpa']
+                    st.dataframe(df_perdidos[col_auditoria].fillna('-').rename(columns={'Responsavel_Papel': 'Responsável', 'Repescagem_Limpa': 'É Repescagem?'}), use_container_width=True, hide_index=True)
                     
                     st.markdown("<br><br><br>", unsafe_allow_html=True)
                 else:
