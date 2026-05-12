@@ -178,18 +178,29 @@ else:
             df['Data Perda Blindada'] = df['Data de fechamento']
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
-        # --- CÁLCULO BRUTO DO TMA ---
-        if col_1_contato and col_criacao in df.columns:
-            df['TMA_Timedelta'] = df[col_1_contato] - df[col_criacao]
-            # Limpa anomalias do HubSpot (datas invertidas)
-            df['TMA_Timedelta'] = df['TMA_Timedelta'].where(df['TMA_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
+        # --- CÁLCULO BRUTO DO TMA (BLINDADO) ---
+        if col_1_contato and col_1_contato in df.columns and col_criacao in df.columns:
+            # Garante que ambas as colunas são datetime antes de subtrair
+            mask_tma_valido = df[col_criacao].notna() & df[col_1_contato].notna()
+            df['TMA_Timedelta'] = pd.NaT
+            df.loc[mask_tma_valido, 'TMA_Timedelta'] = (
+                df.loc[mask_tma_valido, col_1_contato] - df.loc[mask_tma_valido, col_criacao]
+            )
+            # Limpa anomalias do HubSpot (datas invertidas — resultado negativo)
+            mask_negativo = df['TMA_Timedelta'].notna() & (df['TMA_Timedelta'].dt.total_seconds() < 0)
+            df.loc[mask_negativo, 'TMA_Timedelta'] = pd.NaT
         else:
             df['TMA_Timedelta'] = pd.NaT
 
-        # --- CÁLCULO DA PERSISTÊNCIA ---
-        if col_perdido_ent and col_criacao in df.columns:
-            df['Perm_Timedelta'] = df[col_perdido_ent] - df[col_criacao]
-            df['Perm_Timedelta'] = df['Perm_Timedelta'].where(df['Perm_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
+        # --- CÁLCULO DA PERSISTÊNCIA (BLINDADO) ---
+        if col_perdido_ent and col_perdido_ent in df.columns and col_criacao in df.columns:
+            mask_perm_valido = df[col_criacao].notna() & df[col_perdido_ent].notna()
+            df['Perm_Timedelta'] = pd.NaT
+            df.loc[mask_perm_valido, 'Perm_Timedelta'] = (
+                df.loc[mask_perm_valido, col_perdido_ent] - df.loc[mask_perm_valido, col_criacao]
+            )
+            mask_perm_neg = df['Perm_Timedelta'].notna() & (df['Perm_Timedelta'].dt.total_seconds() < 0)
+            df.loc[mask_perm_neg, 'Perm_Timedelta'] = pd.NaT
         else:
             df['Perm_Timedelta'] = pd.NaT
 
@@ -443,17 +454,24 @@ else:
                 df_tma_validos = df_base[mL].copy()
                 
                 if col_1_contato and col_1_contato in df_tma_validos.columns:
-                    # 2. Desconsidera o lead se Data de criação ou 1º contato estiverem vazios
-                    df_tma_validos = df_tma_validos.dropna(subset=[col_criacao, col_1_contato])
+                    # 2. Usa filtro booleano em vez de dropna para evitar KeyError com nomes complexos
+                    mask_tma_page = df_tma_validos[col_criacao].notna() & df_tma_validos[col_1_contato].notna()
+                    df_tma_validos_filtrado = df_tma_validos.loc[mask_tma_page, 'TMA_Timedelta']
+                    tma_validos_pos = df_tma_validos_filtrado[df_tma_validos_filtrado.notna()]
                     # 3. Calcula a média (independente de estar ganho, perdido ou aberto)
-                    tma_medio_td = df_tma_validos['TMA_Timedelta'].mean() if not df_tma_validos.empty else pd.NaT
+                    tma_medio_td = tma_validos_pos.mean() if not tma_validos_pos.empty else pd.NaT
                 else:
                     tma_medio_td = pd.NaT
-                    st.warning(f"Atenção: A coluna '{col_1_contato}' não foi processada.")
+                    if col_1_contato:
+                        st.warning(f"Atenção: A coluna de 1º Contato ('{col_1_contato}') foi identificada mas não está disponível no DataFrame filtrado.")
+                    else:
+                        st.warning("Atenção: Nenhuma coluna de 1º Contato foi encontrada. Verifique se o CSV exportado do HubSpot contém a coluna com '1' e 'ontato' no nome.")
                 
                 # PERMANÊNCIA: Apenas leads perdidos por 'Sem contato'
-                if total_perdas > 0 and col_perdido_ent in df_base.columns:
-                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'].dropna(subset=[col_criacao, col_perdido_ent])
+                if total_perdas > 0 and col_perdido_ent and col_perdido_ent in df_base.columns:
+                    mask_sc = df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'
+                    mask_perm_fields = df_perdidos[col_criacao].notna() & df_perdidos[col_perdido_ent].notna()
+                    df_perdidos_sc = df_perdidos[mask_sc & mask_perm_fields]
                     perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean() if not df_perdidos_sc.empty else pd.NaT
                 else:
                     perm_media_td = pd.NaT
