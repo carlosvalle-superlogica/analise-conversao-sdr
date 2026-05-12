@@ -146,7 +146,11 @@ else:
         # Nomes exatos baseados na sua orientação
         col_criacao = 'Data de criação'
         col_1_contato = 'Date entered "1º Contato (Comercial B2B)"'
-        col_perdido_ent = 'Date entered "Perdidos (Comercial B2B)"'
+        if col_1_contato not in df.columns:
+            # Fallback seguro caso o export tenha variação de caracteres
+            col_1_contato = next((col for col in df.columns if '1' in col and 'Contato' in col and 'B2B' in col), None)
+
+        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
             col_criacao, 
@@ -157,8 +161,8 @@ else:
             '[IS/SDR] Data de Fechamento Perdido'
         ]
         
-        if col_1_contato in df.columns: colunas_data.append(col_1_contato)
-        if col_perdido_ent in df.columns: colunas_data.append(col_perdido_ent)
+        if col_1_contato and col_1_contato in df.columns: colunas_data.append(col_1_contato)
+        if col_perdido_ent and col_perdido_ent in df.columns: colunas_data.append(col_perdido_ent)
         
         # Conversão bruta para Datetime
         for col in colunas_data:
@@ -416,7 +420,7 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS (A ANAMNESE ESTRATÉGICA)
+            # PÁGINA: ❌ PERDIDOS (COM ANAMNESE TEMPORAL EXATA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
@@ -425,40 +429,43 @@ else:
                 total_perdas = len(df_perdidos)
                 total_recebidos = mL.sum() 
                 
+                # ==========================================
+                # 0. ANÁLISE DE TEMPO (TMA E PERSISTÊNCIA)
+                # ==========================================
+                st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
+                
+                # TMA EXATO: Base inteira do filtro. Ignora vazio. Exige Data de Criação E 1º Contato.
+                if col_1_contato in df_base.columns:
+                    df_tma_validos = df_base.dropna(subset=[col_criacao, col_1_contato])
+                    tma_medio_td = df_tma_validos['TMA_Timedelta'].mean() if not df_tma_validos.empty else pd.NaT
+                else:
+                    tma_medio_td = pd.NaT
+                
+                # PERMANÊNCIA: Apenas leads perdidos por 'Sem contato'
+                if total_perdas > 0:
+                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'].dropna(subset=[col_criacao, col_perdido_ent])
+                    perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean() if not df_perdidos_sc.empty else pd.NaT
+                else:
+                    perm_media_td = pd.NaT
+                
+                ct1, ct2 = st.columns(2)
+                ct1.metric(
+                    "TMA Médio (Data de Criação ➔ 1º Contato)", 
+                    formata_tempo(tma_medio_td), 
+                    "Calculado sobre toda a base filtrada que tem os dois campos", 
+                    delta_color="off"
+                )
+                ct2.metric(
+                    "Permanência Média (Apenas motivo 'Sem Contato')", 
+                    formata_tempo(perm_media_td), 
+                    "Data Criação ➔ Data Perdido (Mede a persistência no lead)", 
+                    delta_color="off"
+                )
+                
+                st.divider()
+
                 if total_perdas > 0:
                     df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida'].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
-                    
-                    # ==========================================
-                    # 0. ANÁLISE DE TEMPO (TMA E PERSISTÊNCIA)
-                    # ==========================================
-                    st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
-                    
-                    # A REGRA DO TMA EXATA: Analisa apenas leads da base com Criação e 1º Contato preenchidos.
-                    if col_1_contato in df_base.columns:
-                        df_tma_validos = df_base[df_base['Data de criação'].notna() & df_base[col_1_contato].notna()]
-                        tma_medio_td = df_tma_validos['TMA_Timedelta'].mean()
-                    else:
-                        tma_medio_td = pd.NaT
-                        
-                    # LÓGICA DE PERMANÊNCIA: Apenas leads perdidos por 'Sem Contato'
-                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
-                    perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean()
-                    
-                    ct1, ct2 = st.columns(2)
-                    ct1.metric(
-                        "TMA Médio (Criação ➔ 1º Contato)", 
-                        formata_tempo(tma_medio_td), 
-                        "Média de todos os leads válidos filtrados", 
-                        delta_color="off"
-                    )
-                    ct2.metric(
-                        "Tempo de Funil (APENAS leads 'Sem Contato')", 
-                        formata_tempo(perm_media_td), 
-                        "Criação ➔ Perdido (Mede a persistência no lead)", 
-                        delta_color="off"
-                    )
-                    
-                    st.divider()
 
                     # ==========================================
                     # 1. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS)
