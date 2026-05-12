@@ -118,10 +118,14 @@ if not st.session_state['autenticado']:
 else:
     try:
         # ==============================================================================
-        # CARREGAMENTO E ENGENHARIA DE DADOS (COM NOVA LÓGICA DE TEMPO)
+        # CARREGAMENTO E ENGENHARIA DE DADOS
         # ==============================================================================
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
+
+        # Busca dinâmica de colunas problemáticas no CSV (que contém aspas)
+        col_1_contato = next((col for col in df.columns if '1º Contato' in col), None)
+        col_perdido_ent = next((col for col in df.columns if 'Perdidos (Comercial' in col), None)
 
         colunas_data = [
             'Data de criação', 
@@ -129,10 +133,11 @@ else:
             '[IS/SDR] Data do Agendamento', 
             '[IS/Closer] Reunião Ocorrida', 
             'Data de fechamento',
-            '[IS/SDR] Data de Fechamento Perdido',
-            'Date entered "1º Contato (Comercial B2B)"',
-            'Date entered "Perdidos (Comercial B2B)"'
+            '[IS/SDR] Data de Fechamento Perdido'
         ]
+        
+        if col_1_contato: colunas_data.append(col_1_contato)
+        if col_perdido_ent: colunas_data.append(col_perdido_ent)
         
         for col in colunas_data:
             if col in df.columns:
@@ -145,16 +150,17 @@ else:
             df['Data Perda Blindada'] = df['Data de fechamento']
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
-        # Engenharia de Tempo (TMA e Permanência)
-        if 'Date entered "1º Contato (Comercial B2B)"' in df.columns and 'Data de criação' in df.columns:
-            df['TMA_Minutos'] = (df['Date entered "1º Contato (Comercial B2B)"'] - df['Data de criação']).dt.total_seconds() / 60.0
-            df['TMA_Minutos'] = df['TMA_Minutos'].apply(lambda x: x if x >= 0 else np.nan)
+        # --- ENGENHARIA DE TEMPO (TMA E PERSISTÊNCIA) ---
+        if col_1_contato and 'Data de criação' in df.columns:
+            df['TMA_Minutos'] = (df[col_1_contato] - df['Data de criação']).dt.total_seconds() / 60.0
+            # Remove valores negativos ou lixo
+            df['TMA_Minutos'] = df['TMA_Minutos'].apply(lambda x: x if pd.notna(x) and x >= 0 else np.nan)
         else:
             df['TMA_Minutos'] = np.nan
 
-        if 'Date entered "Perdidos (Comercial B2B)"' in df.columns and 'Data de criação' in df.columns:
-            df['Permanencia_Dias'] = (df['Date entered "Perdidos (Comercial B2B)"'] - df['Data de criação']).dt.total_seconds() / 86400.0
-            df['Permanencia_Dias'] = df['Permanencia_Dias'].apply(lambda x: x if x >= 0 else np.nan)
+        if col_perdido_ent and 'Data de criação' in df.columns:
+            df['Permanencia_Dias'] = (df[col_perdido_ent] - df['Data de criação']).dt.total_seconds() / 86400.0
+            df['Permanencia_Dias'] = df['Permanencia_Dias'].apply(lambda x: x if pd.notna(x) and x >= 0 else np.nan)
         else:
             df['Permanencia_Dias'] = np.nan
 
@@ -389,7 +395,7 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS (COM NOVA ANAMNESE COMPLETA)
+            # PÁGINA: ❌ PERDIDOS (A ANAMNESE ESTRATÉGICA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
@@ -405,17 +411,17 @@ else:
                     # 0. ANÁLISE DE TEMPO (SPEED-TO-LEAD E PERSISTÊNCIA)
                     # ==========================================
                     st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo e Persistência</h4>", unsafe_allow_html=True)
-                    st.info("Métricas baseadas nos leads criados no período filtrado. Avalia a velocidade de resposta (TMA) e quanto tempo o lead fica no funil antes de ser descartado.")
                     
+                    # Cálculos específicos: TMA (período geral) e Permanência (apenas Sem Contato)
                     df_criados = df_base[mL]
                     tma_medio = df_criados['TMA_Minutos'].mean()
-                    perm_media = df_perdidos['Permanencia_Dias'].mean()
-                    taxa_contato_geral = (mC.sum() / total_recebidos * 100) if total_recebidos > 0 else 0
                     
-                    ct1, ct2, ct3 = st.columns(3)
-                    ct1.metric("TMA Médio (Speed-to-lead)", f"{tma_medio:.0f} minutos" if pd.notna(tma_medio) else "N/D", delta_color="inverse")
-                    ct2.metric("Permanência Média no Funil", f"{perm_media:.1f} dias" if pd.notna(perm_media) else "N/D", "Tempo de trabalho antes da perda", delta_color="off")
-                    ct3.metric("Taxa de Contato Geral", f"{taxa_contato_geral:.1f}%")
+                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
+                    perm_media = df_perdidos_sc['Permanencia_Dias'].mean()
+                    
+                    ct1, ct2 = st.columns(2)
+                    ct1.metric("TMA (Tempo Médio do 1º Contato)", f"{tma_medio:.0f} minutos" if pd.notna(tma_medio) else "Sem dados", "Da chegada do lead até a primeira tentativa", delta_color="off")
+                    ct2.metric("Dias no Funil (Apenas 'Sem Contato')", f"{perm_media:.1f} dias" if pd.notna(perm_media) else "Sem dados", "Tempo médio de insistência antes do Lost", delta_color="off")
                     
                     st.divider()
 
