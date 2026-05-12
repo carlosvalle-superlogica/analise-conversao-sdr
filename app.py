@@ -138,22 +138,27 @@ else:
                 return "Sem dados"
 
         # ==============================================================================
-        # CARREGAMENTO E ENGENHARIA DE DADOS (MOTOR BLINDADO)
+        # CARREGAMENTO E ENGENHARIA DE DADOS
         # ==============================================================================
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
         col_criacao = 'Data de criação'
         
-        # Busca 100% segura para evitar KeyError de aspas/simbolos do HubSpot
-        col_1_contato = next((col for col in df.columns if '1' in col and 'ontato' in col.lower()), None)
+        # Busca Dinâmica da coluna de Contato e Perdido (Inflexível a erros de aspas)
+        col_1_contato = None
+        for col in df.columns:
+            if '1' in col and 'ontato' in col.lower():
+                col_1_contato = col
+                break
+                
         col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
             col_criacao, 
-            'Contato Realizado ', 
+            'Contato Realizado', 
             '[IS/SDR] Data do Agendamento', 
-            '[IS/Closer] Reunião Ocorrida ', 
+            '[IS/Closer] Reunião Ocorrida', 
             'Data de fechamento',
             '[IS/SDR] Data de Fechamento Perdido'
         ]
@@ -173,15 +178,15 @@ else:
             df['Data Perda Blindada'] = df['Data de fechamento']
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
-        # --- ENGENHARIA DE TEMPO DIRETA (BLINDADA CONTRA ERROS DE TELA) ---
-        # Calculamos os deltas já na raiz, assim evitamos chamar nomes complexos de colunas depois.
+        # --- CÁLCULO BRUTO DO TMA ---
         if col_1_contato and col_criacao in df.columns:
             df['TMA_Timedelta'] = df[col_1_contato] - df[col_criacao]
-            # Mantém apenas positivos, limpando sujeira do CRM
+            # Limpa anomalias do HubSpot (datas invertidas)
             df['TMA_Timedelta'] = df['TMA_Timedelta'].where(df['TMA_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
         else:
             df['TMA_Timedelta'] = pd.NaT
 
+        # --- CÁLCULO DA PERSISTÊNCIA ---
         if col_perdido_ent and col_criacao in df.columns:
             df['Perm_Timedelta'] = df[col_perdido_ent] - df[col_criacao]
             df['Perm_Timedelta'] = df['Perm_Timedelta'].where(df['Perm_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
@@ -252,11 +257,10 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
+            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
-            
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
         else:
@@ -305,9 +309,9 @@ else:
                     
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
                     
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
@@ -419,11 +423,12 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS (COM ANAMNESE TEMPORAL EXATA E BLINDADA)
+            # PÁGINA: ❌ PERDIDOS (A ANAMNESE ESTRATÉGICA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
                 
+                # df_perdidos foca APENAS nos leads que caíram pra Perdido no período
                 df_perdidos = df_base[mP].copy()
                 total_perdas = len(df_perdidos)
                 total_recebidos = mL.sum() 
@@ -433,39 +438,49 @@ else:
                 # ==========================================
                 st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
                 
-                # TMA EXATO: Lê o Timedelta criado de forma segura. Remove NAs com dropna sem KeyErrors.
-                tma_medio_td = df_base['TMA_Timedelta'].dropna().mean()
+                # TMA EXATO DA REGRA DO CARLOS:
+                # 1. Filtra a base APENAS pelos leads criados no período (mL)
+                df_tma_validos = df_base[mL].copy()
+                
+                if col_1_contato and col_1_contato in df_tma_validos.columns:
+                    # 2. Desconsidera o lead se Data de criação ou 1º contato estiverem vazios
+                    df_tma_validos = df_tma_validos.dropna(subset=[col_criacao, col_1_contato])
+                    # 3. Calcula a média (independente de estar ganho, perdido ou aberto)
+                    tma_medio_td = df_tma_validos['TMA_Timedelta'].mean() if not df_tma_validos.empty else pd.NaT
+                else:
+                    tma_medio_td = pd.NaT
+                    st.warning(f"Atenção: A coluna '{col_1_contato}' não foi processada.")
                 
                 # PERMANÊNCIA: Apenas leads perdidos por 'Sem contato'
-                if total_perdas > 0:
-                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
-                    perm_media_td = df_perdidos_sc['Perm_Timedelta'].dropna().mean()
+                if total_perdas > 0 and col_perdido_ent in df_base.columns:
+                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'].dropna(subset=[col_criacao, col_perdido_ent])
+                    perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean() if not df_perdidos_sc.empty else pd.NaT
                 else:
                     perm_media_td = pd.NaT
                 
                 ct1, ct2 = st.columns(2)
                 ct1.metric(
-                    "TMA Médio (Criação ➔ 1º Contato)", 
+                    "TMA Médio (Data de Criação ➔ 1º Contato)", 
                     formata_tempo(tma_medio_td), 
-                    "Base filtrada inteira (Calcula apenas quem tem os dois campos preenchidos)", 
+                    "Calculado sobre toda a base filtrada que possui os dois campos preenchidos", 
                     delta_color="off"
                 )
                 ct2.metric(
                     "Permanência Média (Apenas motivo 'Sem Contato')", 
                     formata_tempo(perm_media_td), 
-                    "Criação ➔ Perdido (Mede a persistência no lead)", 
+                    "Data de Criação ➔ Data de Perdido (Mede a persistência no lead)", 
                     delta_color="off"
                 )
                 
                 st.divider()
 
                 if total_perdas > 0:
-                    df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida '].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
+                    df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida'].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
 
                     # ==========================================
                     # 1. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS)
                     # ==========================================
-                    st.markdown("<h4 style='text-align: center; color: #B91C1C;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color: #B91C1C; margin-top: 10px; text-align: center;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
                     
                     motivos_lixo = ['Sem contato', 'Dados inconsistentes', 'Desqualificado', 'Contato duplicado']
                     df_lixo = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'].isin(motivos_lixo)]
