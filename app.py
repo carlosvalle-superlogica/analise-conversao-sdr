@@ -138,14 +138,14 @@ else:
                 return "Sem dados"
 
         # ==============================================================================
-        # CARREGAMENTO E ENGENHARIA DE DADOS
+        # CARREGAMENTO E ENGENHARIA DE DADOS (MOTOR BLINDADO)
         # ==============================================================================
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
         col_criacao = 'Data de criação'
         
-        # Busca 100% segura para evitar erros de leitura de aspas
+        # Busca 100% segura para evitar KeyError de aspas/simbolos do HubSpot
         col_1_contato = next((col for col in df.columns if '1' in col and 'ontato' in col.lower()), None)
         col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
@@ -174,6 +174,7 @@ else:
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
         # --- ENGENHARIA DE TEMPO DIRETA (BLINDADA CONTRA ERROS DE TELA) ---
+        # Calculamos os deltas já na raiz, assim evitamos chamar nomes complexos de colunas depois.
         if col_1_contato and col_criacao in df.columns:
             df['TMA_Timedelta'] = df[col_1_contato] - df[col_criacao]
             # Mantém apenas positivos, limpando sujeira do CRM
@@ -432,7 +433,7 @@ else:
                 # ==========================================
                 st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
                 
-                # TMA EXATO: Lê o Timedelta criado lá em cima com segurança. Ignora quem está vazio (dropna).
+                # TMA EXATO: Lê o Timedelta criado de forma segura. Remove NAs com dropna sem KeyErrors.
                 tma_medio_td = df_base['TMA_Timedelta'].dropna().mean()
                 
                 # PERMANÊNCIA: Apenas leads perdidos por 'Sem contato'
