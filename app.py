@@ -118,23 +118,22 @@ if not st.session_state['autenticado']:
 else:
     try:
         # ==============================================================================
-        # FUNÇÃO MATEMÁTICA DE FORMATAÇÃO DE TEMPO (SEGUNDOS -> 0h 5min)
+        # FUNÇÃO MATEMÁTICA DE FORMATAÇÃO DE TEMPO (DIAS, HORAS, MIN)
         # ==============================================================================
-        def formata_tempo(segundos):
-            if pd.isna(segundos) or segundos < 0: 
-                return "Sem dados"
+        def formata_tempo(td):
+            if pd.isna(td): return "Sem dados"
             try:
-                segundos = int(segundos)
-                dias = segundos // 86400
-                horas = (segundos % 86400) // 3600
-                minutos = (segundos % 3600) // 60
+                total_segundos = int(td.total_seconds())
+                if total_segundos < 0: return "Sem dados"
+                dias = total_segundos // 86400
+                horas = (total_segundos % 86400) // 3600
+                minutos = (total_segundos % 3600) // 60
                 
-                if dias > 0:
-                    return f"{dias}d {horas}h {minutos}min"
-                elif horas > 0:
-                    return f"{horas}h {minutos}min"
-                else:
-                    return f"{minutos}min"
+                partes = []
+                if dias > 0: partes.append(f"{dias} dias")
+                if horas > 0: partes.append(f"{horas} horas")
+                if minutos > 0 or not partes: partes.append(f"{minutos} min")
+                return ", ".join(partes)
             except:
                 return "Sem dados"
 
@@ -157,9 +156,9 @@ else:
 
         colunas_data = [
             col_criacao, 
-            'Contato Realizado ', 
+            'Contato Realizado', 
             '[IS/SDR] Data do Agendamento', 
-            '[IS/Closer] Reunião Ocorrida ', 
+            '[IS/Closer] Reunião Ocorrida', 
             'Data de fechamento',
             '[IS/SDR] Data de Fechamento Perdido'
         ]
@@ -179,16 +178,20 @@ else:
             df['Data Perda Blindada'] = df['Data de fechamento']
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
-        # --- CÁLCULO DE TEMPO EM SEGUNDOS PUROS (LÓGICA IGUAL AO EXCEL) ---
+        # --- CÁLCULO BRUTO DO TMA ---
         if col_1_contato and col_criacao in df.columns:
-            df['TMA_Segundos'] = (df[col_1_contato] - df[col_criacao]).dt.total_seconds()
+            df['TMA_Timedelta'] = df[col_1_contato] - df[col_criacao]
+            # Limpa anomalias do HubSpot (datas invertidas)
+            df['TMA_Timedelta'] = df['TMA_Timedelta'].where(df['TMA_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
         else:
-            df['TMA_Segundos'] = np.nan
+            df['TMA_Timedelta'] = pd.NaT
 
+        # --- CÁLCULO DA PERSISTÊNCIA ---
         if col_perdido_ent and col_criacao in df.columns:
-            df['Perm_Segundos'] = (df[col_perdido_ent] - df[col_criacao]).dt.total_seconds()
+            df['Perm_Timedelta'] = df[col_perdido_ent] - df[col_criacao]
+            df['Perm_Timedelta'] = df['Perm_Timedelta'].where(df['Perm_Timedelta'].dt.total_seconds() >= 0, pd.NaT)
         else:
-            df['Perm_Segundos'] = np.nan
+            df['Perm_Timedelta'] = pd.NaT
 
         # Normalizações Qualitativas
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
@@ -254,11 +257,10 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
+            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
-            
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
         else:
@@ -307,9 +309,9 @@ else:
                     
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
                     
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
@@ -426,6 +428,7 @@ else:
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
                 
+                # df_perdidos foca APENAS nos leads que caíram pra Perdido no período
                 df_perdidos = df_base[mP].copy()
                 total_perdas = len(df_perdidos)
                 total_recebidos = mL.sum() 
@@ -435,43 +438,49 @@ else:
                 # ==========================================
                 st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
                 
-                # TMA: Média de tempo (em SEGUNDOS puros) dos leads da base inteira
-                tma_validos = df_base.loc[mL, 'TMA_Segundos']
-                tma_validos = tma_validos[tma_validos >= 0].dropna()
-                tma_medio_seg = tma_validos.mean() if not tma_validos.empty else np.nan
+                # TMA EXATO DA REGRA DO CARLOS:
+                # 1. Filtra a base APENAS pelos leads criados no período (mL)
+                df_tma_validos = df_base[mL].copy()
                 
-                # PERMANÊNCIA: Média de tempo (em SEGUNDOS puros) dos leads 'Sem contato'
-                if total_perdas > 0:
-                    mask_sc = df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'
-                    perm_validos = df_perdidos.loc[mask_sc, 'Perm_Segundos']
-                    perm_validos = perm_validos[perm_validos >= 0].dropna()
-                    perm_medio_seg = perm_validos.mean() if not perm_validos.empty else np.nan
+                if col_1_contato and col_1_contato in df_tma_validos.columns:
+                    # 2. Desconsidera o lead se Data de criação ou 1º contato estiverem vazios
+                    df_tma_validos = df_tma_validos.dropna(subset=[col_criacao, col_1_contato])
+                    # 3. Calcula a média (independente de estar ganho, perdido ou aberto)
+                    tma_medio_td = df_tma_validos['TMA_Timedelta'].mean() if not df_tma_validos.empty else pd.NaT
                 else:
-                    perm_medio_seg = np.nan
+                    tma_medio_td = pd.NaT
+                    st.warning(f"Atenção: A coluna '{col_1_contato}' não foi processada.")
+                
+                # PERMANÊNCIA: Apenas leads perdidos por 'Sem contato'
+                if total_perdas > 0 and col_perdido_ent in df_base.columns:
+                    df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'].dropna(subset=[col_criacao, col_perdido_ent])
+                    perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean() if not df_perdidos_sc.empty else pd.NaT
+                else:
+                    perm_media_td = pd.NaT
                 
                 ct1, ct2 = st.columns(2)
                 ct1.metric(
                     "TMA Médio (Data de Criação ➔ 1º Contato)", 
-                    formata_tempo(tma_medio_seg), 
-                    "Base filtrada inteira (Calcula apenas quem tem os dois campos preenchidos)", 
+                    formata_tempo(tma_medio_td), 
+                    "Calculado sobre toda a base filtrada que possui os dois campos preenchidos", 
                     delta_color="off"
                 )
                 ct2.metric(
                     "Permanência Média (Apenas motivo 'Sem Contato')", 
-                    formata_tempo(perm_medio_seg), 
-                    "Data Criação ➔ Data Perdido (Mede a persistência no lead)", 
+                    formata_tempo(perm_media_td), 
+                    "Data de Criação ➔ Data de Perdido (Mede a persistência no lead)", 
                     delta_color="off"
                 )
                 
                 st.divider()
 
                 if total_perdas > 0:
-                    df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida '].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
+                    df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida'].apply(lambda x: 'Closer' if pd.notnull(x) else 'SDR')
 
                     # ==========================================
                     # 1. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS)
                     # ==========================================
-                    st.markdown("<h4 style='text-align: center; color: #B91C1C;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color: #B91C1C; margin-top: 10px; text-align: center;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
                     
                     motivos_lixo = ['Sem contato', 'Dados inconsistentes', 'Desqualificado', 'Contato duplicado']
                     df_lixo = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'].isin(motivos_lixo)]
@@ -557,8 +566,8 @@ else:
                     st.subheader("🔍 Auditoria de Textos, Sub-motivos e Tempos Operacionais")
                     st.markdown("Examine cada lead para validar o tempo de resposta, o tempo de persistência e as anotações do time.")
                     
-                    df_perdidos['TMA do Lead'] = df_perdidos['TMA_Segundos'].apply(formata_tempo)
-                    df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Segundos'].apply(formata_tempo)
+                    df_perdidos['TMA do Lead'] = df_perdidos['TMA_Timedelta'].apply(formata_tempo)
+                    df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta'].apply(formata_tempo)
                     
                     col_auditoria = ['Nome do negócio', 'Responsavel_Papel', 'TMA do Lead', 'Tempo no Funil', 'Motivo de Fechamento Perdido', 'Motivo de Fechamento Perdido (Sub-motivo)', 'Descrição de fechamento perdido', 'Repescagem_Limpa']
                     st.dataframe(df_perdidos[col_auditoria].fillna('-').rename(columns={'Responsavel_Papel': 'Responsável Pela Perda', 'Repescagem_Limpa': 'É Repescagem?'}), use_container_width=True, hide_index=True)
