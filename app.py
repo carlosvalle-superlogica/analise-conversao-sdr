@@ -137,8 +137,13 @@ else:
         df = pd.read_csv('bd-teste-sistema.csv')
         df.columns = df.columns.str.strip()
 
-        # Busca infalível de colunas problemáticas no CSV
-        col_1_contato = next((col for col in df.columns if '1' in col and 'ontato' in col and 'B2B' in col), None)
+        # Busca infalível da coluna de 1º contato (cobrindo aspas e caracteres)
+        col_1_contato = None
+        for col in df.columns:
+            if '1º Contato' in col or '1o Contato' in col or '1° Contato' in col:
+                col_1_contato = col
+                break
+                
         col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
@@ -409,12 +414,11 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS (COM ANAMNESE TEMPORAL CORRIGIDA)
+            # PÁGINA: ❌ PERDIDOS (COM ANAMNESE TEMPORAL EXATA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
                 
-                # df_perdidos foca nos leads do período atual do filtro que caíram pra Perdido
                 df_perdidos = df_base[mP].copy()
                 total_perdas = len(df_perdidos)
                 total_recebidos = mL.sum() 
@@ -425,26 +429,27 @@ else:
                     # ==========================================
                     # 0. ANÁLISE DE TEMPO (TMA E PERSISTÊNCIA)
                     # ==========================================
-                    st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo e Persistência</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
                     
-                    # O TMA médio agora calcula apenas para os leads perdidos sendo analisados na tela
-                    tma_medio_td = df_perdidos['TMA_Timedelta'].mean()
+                    # TMA dos leads CRIADOS no período (Speed-to-lead real da operação)
+                    df_criados = df_base[mL]
+                    tma_medio_td = df_criados['TMA_Timedelta'].mean()
                     
-                    # Permanência apenas para perdas com motivo "Sem contato"
+                    # Permanência APENAS para os leads PERDIDOS por 'Sem Contato'
                     df_perdidos_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
                     perm_media_td = df_perdidos_sc['Perm_Timedelta'].mean()
                     
                     ct1, ct2 = st.columns(2)
                     ct1.metric(
-                        "TMA Médio (Data Criação ➔ Data 1º Contato)", 
+                        "TMA Médio (Data de Criação ➔ Data do 1º Contato)", 
                         formata_tempo(tma_medio_td), 
-                        "Velocidade média de atendimento", 
+                        "Média de todos os leads criados no período", 
                         delta_color="off"
                     )
                     ct2.metric(
-                        "Tempo de Funil (APENAS motivos 'Sem Contato')", 
+                        "Permanência no Funil (APENAS leads 'Sem Contato')", 
                         formata_tempo(perm_media_td), 
-                        "Data Criação ➔ Data Perdido (Persistência no lead)", 
+                        "Data Criação ➔ Data Perdido (Mede a persistência do time)", 
                         delta_color="off"
                     )
                     
@@ -539,6 +544,7 @@ else:
                     st.subheader("🔍 Auditoria de Textos, Sub-motivos e Tempos Operacionais")
                     st.markdown("Examine cada lead para validar o tempo de resposta, o tempo de persistência e as anotações do time.")
                     
+                    # Convertendo as colunas de tempo na tabela para texto humano legível
                     df_perdidos['TMA do Lead'] = df_perdidos['TMA_Timedelta'].apply(formata_tempo)
                     df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta'].apply(formata_tempo)
                     
