@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 
 # ==============================================================================
 # ESTRUTURA BLINDADA - CONFIGURAÇÃO E ESTILO (DESIGN PREMIUM)
@@ -213,9 +214,9 @@ else:
         st.sidebar.markdown("<br><h2 style='font-size: 1.1rem; margin-bottom: 5px;'>Módulos</h2>", unsafe_allow_html=True)
 
         if st.session_state['perfil'] == "master":
-            menu_opcoes = ["📊 Dashboard Geral", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
+            menu_opcoes = ["📊 Dashboard Geral", "📦 Produtos / Closer's / VC", "💰 Receita", "🗺️ Mapa Geográfico", "❌ Perdidos", "⚙️ Configurações"]
         else:
-            menu_opcoes = ["📊 Dashboard Geral"]
+            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico"]
 
         pagina_sel = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
 
@@ -231,8 +232,9 @@ else:
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
             col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
             with col_top1:
-                data_min = df['Data de criação'].dropna().min().date()
-                data_max = df['Data de criação'].dropna().max().date()
+                data_min = df['Data de creation'].dropna().min().date() if not df.empty and pd.notna(df['Data de criação'].min()) else pd.to_datetime('2024-01-01').date()
+                data_max = df['Data de creation'].dropna().max().date() if not df.empty and pd.notna(df['Data de criação'].max()) else pd.to_datetime('today').date()
+                data_min, data_max = df['Data de criação'].dropna().min().date(), df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
@@ -276,11 +278,9 @@ else:
             col_cs = '[CS] CS que indicou'
             if col_cs in df_base.columns:
                 if vc_filtro == "Sim":
-                    # Filtra leads onde a coluna não é nula e não está vazia (É conhecido)
                     mask_vc_sim = df_base[col_cs].notna() & (df_base[col_cs].astype(str).str.strip() != "")
                     df_base = df_base[mask_vc_sim]
                 elif vc_filtro == "Não":
-                    # Filtra leads onde a coluna é nula ou está vazia (É desconhecido)
                     mask_vc_nao = df_base[col_cs].isna() | (df_base[col_cs].astype(str).str.strip() == "")
                     df_base = df_base[mask_vc_nao]
 
@@ -432,6 +432,66 @@ else:
                             )
 
             # --------------------------------------------------------------------------
+            # PÁGINA: MAPA GEOGRÁFICO
+            # --------------------------------------------------------------------------
+            elif pagina_sel == "🗺️ Mapa Geográfico":
+                st.markdown("### 🗺️ Mapa Geográfico de Distribuição")
+                st.info("Visualização de calor por estado. Filtre a base na aba superior para ver regiões mais quentes de operação.")
+                
+                col_estado = '[IS] Estado'
+                if col_estado in df_base.columns:
+                    # Agrupamentos para o mapa
+                    map_l = df_base[mL].groupby(col_estado).size().reset_index(name='Leads')
+                    map_r = df_base[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
+                    map_f = df_base[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
+                    
+                    df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
+                    
+                    # Padronização e limpeza das siglas (garante leitura pelo Plotly)
+                    df_map[col_estado] = df_map[col_estado].astype(str).str.upper().str.strip()
+                    df_map = df_map[df_map[col_estado].str.len() == 2] # Somente siglas reais
+                    
+                    if not df_map.empty:
+                        metrica_cor = st.radio("Selecione a métrica para o Mapa de Calor:", ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos'], horizontal=True)
+                        
+                        # Fonte pública oficial para desenhar o Brasil
+                        geojson_url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
+                        
+                        fig = px.choropleth(
+                            df_map,
+                            geojson=geojson_url,
+                            locations=col_estado,
+                            featureidkey="properties.sigla",
+                            color=metrica_cor,
+                            color_continuous_scale="Blues",
+                            hover_name=col_estado,
+                            hover_data={
+                                col_estado: False,
+                                'Leads': True,
+                                'RO (Reunião Ocorrida)': True,
+                                'Fechados/Pagos': True
+                            }
+                        )
+                        fig.update_geos(fitbounds="locations", visible=False)
+                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        st.divider()
+                        st.subheader("📊 Tabela de Detalhamento por Estado")
+                        
+                        # Formatando para inteiros na tabela final
+                        df_map['Leads'] = df_map['Leads'].astype(int)
+                        df_map['RO (Reunião Ocorrida)'] = df_map['RO (Reunião Ocorrida)'].astype(int)
+                        df_map['Fechados/Pagos'] = df_map['Fechados/Pagos'].astype(int)
+                        
+                        st.dataframe(df_map.sort_values(by=metrica_cor, ascending=False), use_container_width=True, hide_index=True)
+                    else:
+                        st.warning("Nenhum dado com sigla de estado válido encontrado no período filtrado.")
+                else:
+                    st.error("A coluna '[IS] Estado' não foi encontrada na base de dados.")
+
+            # --------------------------------------------------------------------------
             # PÁGINA: PRODUTOS / CLOSER'S / VC
             # --------------------------------------------------------------------------
             elif pagina_sel == "📦 Produtos / Closer's / VC":
@@ -547,7 +607,7 @@ else:
                 st.divider()
 
                 if total_perdas > 0:
-                    df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida'].apply(
+                    df_perdidos['Responsavel_Papel'] = df_perdidos['[IS/Closer] Reunião Ocorrida '].apply(
                         lambda x: 'Closer' if pd.notnull(x) else 'SDR'
                     )
 
