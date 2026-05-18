@@ -229,13 +229,15 @@ else:
         # FILTROS GLOBAIS
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top2 = st.columns([3, 1])
+            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
+            with col_top3:
+                vc_filtro = st.selectbox("VC que Indicou?", ["Todos", "Sim", "Não"])
 
             col_left, col_right = st.columns(2)
             with col_left:
@@ -268,6 +270,18 @@ else:
 
         if repescagem_filtro != "Todos":
             df_base = df_base[df_base['Repescagem_Limpa'] == repescagem_filtro]
+
+        if vc_filtro != "Todos":
+            col_vc = next((col for col in df_base.columns if 'vc' in col.lower() and 'indicou' in col.lower()), '[VC] VC que indicou')
+            if col_vc in df_base.columns:
+                mask_vc_filled = df_base[col_vc].notna() & (df_base[col_vc].astype(str).str.strip() != "")
+                if vc_filtro == "Sim":
+                    df_base = df_base[mask_vc_filled]
+                elif vc_filtro == "Não":
+                    df_base = df_base[~mask_vc_filled]
+            else:
+                if vc_filtro == "Sim":
+                    df_base = df_base.iloc[0:0]
 
         # Máscaras Matemáticas de Data
         if len(periodo) == 2:
