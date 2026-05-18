@@ -195,8 +195,7 @@ else:
         # Normalizações Qualitativas
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
-        
-        # Normalização do CS para o novo Filtro
+
         if '[CS] CS que indicou' in df.columns:
             df['Filtro_CS'] = df['[CS] CS que indicou'].fillna('Sem CS')
         else:
@@ -227,39 +226,31 @@ else:
             st.rerun()
 
         # ==============================================================================
-        # FILTROS GLOBAIS (DESIGN REORGANIZADO)
+        # FILTROS GLOBAIS
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            # 1. LINHA SUPERIOR: Período e Repescagem
-            c_top1, c_top2 = st.columns([3, 1])
-            with c_top1:
+            col_top1, col_top2 = st.columns([3, 1])
+            with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
-            with c_top2:
+            with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
-                
-            st.write("") # Espaçamento para respiro visual
-            
-            # 2. LINHA INFERIOR: Qualificação (Esquerda) e Equipe (Direita)
-            c_bot1, c_bot2 = st.columns([1, 1])
-            
-            with c_bot1: # LADO ESQUERDO
+
+            col_left, col_right = st.columns(2)
+            with col_left:
                 tipos_sel = st.multiselect("Tipo de Lead", sorted(df["[IS] Tipo de lead"].dropna().unique().tolist()), default=sorted(df["[IS] Tipo de lead"].dropna().unique().tolist()))
                 jornada_sel = st.multiselect("Jornada", sorted(df["[IS] Lead com Jornada:"].dropna().unique().tolist()), default=sorted(df["[IS] Lead com Jornada:"].dropna().unique().tolist()))
                 origens_sel = st.multiselect("Origem do Lead", sorted(df["[IS] Origem do lead"].dropna().unique().tolist()), default=sorted(df["[IS] Origem do lead"].dropna().unique().tolist()))
-                
-            with c_bot2: # LADO DIREITO
+
+            with col_right:
                 if st.session_state['perfil'] == "master":
-                    # Subdivisão para colocar SDR e Closer lado a lado
                     col_sdr, col_closer = st.columns(2)
                     with col_sdr:
                         sdrs_sel = st.multiselect("SDR", sorted(df['Filtro_SDR'].unique().tolist()), default=sorted(df['Filtro_SDR'].unique().tolist()))
                     with col_closer:
                         closers_sel = st.multiselect("Closer", sorted(df['Filtro_Closer'].unique().tolist()), default=sorted(df['Filtro_Closer'].unique().tolist()))
-                    
-                    # CS centralizado logo abaixo
-                    cs_sel = st.multiselect("CS (Indicação)", sorted(df['Filtro_CS'].unique().tolist()), default=sorted(df['Filtro_CS'].unique().tolist()))
+                    cs_sel = st.multiselect("CS", sorted(df['Filtro_CS'].unique().tolist()), default=sorted(df['Filtro_CS'].unique().tolist()))
                 else:
                     sdrs_sel = df['Filtro_SDR'].unique().tolist()
                     closers_sel = df['Filtro_Closer'].unique().tolist()
