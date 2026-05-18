@@ -201,6 +201,13 @@ else:
             df['Filtro_CS'] = df['[CS] CS que indicou'].fillna('Sem CS')
         else:
             df['Filtro_CS'] = 'Sem CS'
+            
+        # Normalização do Estado (A correção para não excluir leads vazios)
+        col_estado = '[IS] Estado'
+        if col_estado in df.columns:
+            df['Filtro_Estado'] = df[col_estado].fillna('Sem Estado')
+        else:
+            df['Filtro_Estado'] = 'Sem Estado'
 
         if '[Comercial B2B] Repescagem' in df.columns:
             df['Repescagem_Limpa'] = df['[Comercial B2B] Repescagem'].fillna('Não').astype(str).str.strip().str.title()
@@ -229,8 +236,6 @@ else:
         # ==============================================================================
         # FILTROS GLOBAIS
         # ==============================================================================
-        col_estado = '[IS] Estado'
-
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
             col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
             with col_top1:
@@ -238,11 +243,7 @@ else:
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
             with col_top_est:
-                if col_estado in df.columns:
-                    estados_raw = df[col_estado].dropna().astype(str).str.strip().unique().tolist()
-                    estados_unicos = sorted([x for x in estados_raw if x])
-                else:
-                    estados_unicos = []
+                estados_unicos = sorted(df['Filtro_Estado'].astype(str).unique().tolist())
                 estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
@@ -275,11 +276,9 @@ else:
             (df["[IS] Lead com Jornada:"].isin(jornada_sel)) &
             (df['Filtro_SDR'].isin(sdrs_sel)) &
             (df['Filtro_Closer'].isin(closers_sel)) &
-            (df['Filtro_CS'].isin(cs_sel))
+            (df['Filtro_CS'].isin(cs_sel)) &
+            (df['Filtro_Estado'].isin(estados_sel))
         ].copy()
-
-        if col_estado in df_base.columns:
-            df_base = df_base[df_base[col_estado].astype(str).str.strip().isin(estados_sel)]
 
         if repescagem_filtro != "Todos":
             df_base = df_base[df_base['Repescagem_Limpa'] == repescagem_filtro]
@@ -301,9 +300,9 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
+            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
@@ -358,9 +357,9 @@ else:
 
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
 
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
@@ -422,15 +421,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs = '[CS] CS que indicou'
-                        if col_cs in df_base.columns:
-                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
+                        col_cs_indicou = '[CS] CS que indicou'
+                        if col_cs_indicou in df_base.columns:
+                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -440,7 +439,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -458,7 +457,7 @@ else:
                     
                     df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
                     
-                    # Padronização e limpeza das siglas
+                    # Padronização e limpeza das siglas (E ignorando os que não tem estado definido no desenho do mapa)
                     df_map[col_estado] = df_map[col_estado].astype(str).str.upper().str.strip()
                     df_map = df_map[df_map[col_estado].str.len() == 2] # Somente siglas reais
                     
