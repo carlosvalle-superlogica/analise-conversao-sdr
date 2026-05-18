@@ -229,12 +229,21 @@ else:
         # ==============================================================================
         # FILTROS GLOBAIS
         # ==============================================================================
+        col_estado = '[IS] Estado'
+        
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
+            col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
+            with col_top_est:
+                if col_estado in df.columns:
+                    estados_raw = df[col_estado].dropna().astype(str).str.strip().unique().tolist()
+                    estados_unicos = sorted([x for x in estados_raw if x])
+                else:
+                    estados_unicos = []
+                estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
             with col_top3:
@@ -269,6 +278,9 @@ else:
             (df['Filtro_CS'].isin(cs_sel))
         ].copy()
 
+        if col_estado in df_base.columns:
+            df_base = df_base[df_base[col_estado].astype(str).str.strip().isin(estados_sel)]
+
         if repescagem_filtro != "Todos":
             df_base = df_base[df_base['Repescagem_Limpa'] == repescagem_filtro]
 
@@ -277,11 +289,9 @@ else:
             col_cs = '[CS] CS que indicou'
             if col_cs in df_base.columns:
                 if vc_filtro == "Sim":
-                    # Filtra leads onde a coluna não é nula e não está vazia (É conhecido)
                     mask_vc_sim = df_base[col_cs].notna() & (df_base[col_cs].astype(str).str.strip() != "")
                     df_base = df_base[mask_vc_sim]
                 elif vc_filtro == "Não":
-                    # Filtra leads onde a coluna é nula ou está vazia (É desconhecido)
                     mask_vc_nao = df_base[col_cs].isna() | (df_base[col_cs].astype(str).str.strip() == "")
                     df_base = df_base[mask_vc_nao]
 
@@ -410,15 +420,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs = '[CS] CS que indicou'
-                        if col_cs in df_base.columns:
-                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
+                        col_cs_indicou = '[CS] CS que indicou'
+                        if col_cs_indicou in df_base.columns:
+                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -428,7 +438,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -439,7 +449,6 @@ else:
                 st.markdown("### 🗺️ Mapa Geográfico de Distribuição")
                 st.info("Visualização de calor por estado. Filtre a base na aba superior para ver regiões mais quentes de operação.")
                 
-                col_estado = '[IS] Estado'
                 if col_estado in df_base.columns:
                     map_l = df_base[mL].groupby(col_estado).size().reset_index(name='Leads')
                     map_r = df_base[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
@@ -482,6 +491,9 @@ else:
                         df_map['Leads'] = df_map['Leads'].astype(int)
                         df_map['RO (Reunião Ocorrida)'] = df_map['RO (Reunião Ocorrida)'].astype(int)
                         df_map['Fechados/Pagos'] = df_map['Fechados/Pagos'].astype(int)
+                        
+                        df_map['Conv. (Lead ➔ RO)'] = df_map.apply(lambda r: f"{(r['RO (Reunião Ocorrida)']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
+                        df_map['Conv. (Lead ➔ Fechado/Pago)'] = df_map.apply(lambda r: f"{(r['Fechados/Pagos']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
                         
                         st.dataframe(df_map.sort_values(by=metrica_cor, ascending=False), use_container_width=True, hide_index=True)
                     else:
