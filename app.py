@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -410,15 +410,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs_indicou = '[CS] CS que indicou'
-                        if col_cs_indicou in df_base.columns:
-                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
+                        col_cs = '[CS] CS que indicou'
+                        if col_cs in df_base.columns:
+                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -428,7 +428,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -447,12 +447,12 @@ else:
                     
                     estados_mapa_sel = st.multiselect("Filtrar Estados no Mapa:", estados_disponiveis, default=estados_disponiveis)
                     
-                    # Filtra a base local do mapa baseado na seleção local
-                    df_mapa_local = df_base[df_base[col_estado].astype(str).str.upper().str.strip().isin(estados_mapa_sel)].copy()
+                    # Cria a máscara do estado combinando com as máscaras globais de data que já existem!
+                    mask_estado_mapa = df_base[col_estado].astype(str).str.upper().str.strip().isin(estados_mapa_sel)
                     
-                    map_l = df_mapa_local[mL].groupby(col_estado).size().reset_index(name='Leads')
-                    map_r = df_mapa_local[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
-                    map_f = df_mapa_local[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
+                    map_l = df_base[mL & mask_estado_mapa].groupby(col_estado).size().reset_index(name='Leads')
+                    map_r = df_base[mR & mask_estado_mapa].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
+                    map_f = df_base[mF & mask_estado_mapa].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
                     
                     df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
                     
@@ -702,7 +702,7 @@ else:
 
                     # ==========================================
                     # 3. ANÁLISE CRUZADA: ORIGEM X MOTIVO
-                    # ==============================================
+                    # ==========================================
                     st.subheader("📍 Análise Cruzada: Origem x Motivo de Perda")
                     st.info("A matriz abaixo exibe o volume de perdas cruzando a Origem de Marketing com o Motivo.")
                     pivot_origem = pd.crosstab(
