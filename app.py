@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 
 # ==============================================================================
 # ESTRUTURA BLINDADA - CONFIGURAÇÃO E ESTILO (DESIGN PREMIUM)
@@ -214,9 +213,9 @@ else:
         st.sidebar.markdown("<br><h2 style='font-size: 1.1rem; margin-bottom: 5px;'>Módulos</h2>", unsafe_allow_html=True)
 
         if st.session_state['perfil'] == "master":
-            menu_opcoes = ["📊 Dashboard Geral", "📦 Produtos / Closer's / VC", "💰 Receita", "🗺️ Mapa Geográfico", "❌ Perdidos", "⚙️ Configurações"]
+            menu_opcoes = ["📊 Dashboard Geral", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
-            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico"]
+            menu_opcoes = ["📊 Dashboard Geral"]
 
         pagina_sel = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
 
@@ -229,21 +228,12 @@ else:
         # ==============================================================================
         # FILTROS GLOBAIS
         # ==============================================================================
-        col_estado = '[IS] Estado'
-        
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
+            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
-            with col_top_est:
-                if col_estado in df.columns:
-                    estados_raw = df[col_estado].dropna().astype(str).str.strip().unique().tolist()
-                    estados_unicos = sorted([x for x in estados_raw if x])
-                else:
-                    estados_unicos = []
-                estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
             with col_top3:
@@ -278,9 +268,6 @@ else:
             (df['Filtro_CS'].isin(cs_sel))
         ].copy()
 
-        if col_estado in df_base.columns:
-            df_base = df_base[df_base[col_estado].astype(str).str.strip().isin(estados_sel)]
-
         if repescagem_filtro != "Todos":
             df_base = df_base[df_base['Repescagem_Limpa'] == repescagem_filtro]
 
@@ -289,9 +276,11 @@ else:
             col_cs = '[CS] CS que indicou'
             if col_cs in df_base.columns:
                 if vc_filtro == "Sim":
+                    # Filtra leads onde a coluna não é nula e não está vazia (É conhecido)
                     mask_vc_sim = df_base[col_cs].notna() & (df_base[col_cs].astype(str).str.strip() != "")
                     df_base = df_base[mask_vc_sim]
                 elif vc_filtro == "Não":
+                    # Filtra leads onde a coluna é nula ou está vazia (É desconhecido)
                     mask_vc_nao = df_base[col_cs].isna() | (df_base[col_cs].astype(str).str.strip() == "")
                     df_base = df_base[mask_vc_nao]
 
@@ -299,9 +288,9 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
+            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
@@ -356,9 +345,9 @@ else:
 
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
 
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
@@ -420,15 +409,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs_indicou = '[CS] CS que indicou'
-                        if col_cs_indicou in df_base.columns:
-                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
+                        col_cs = '[CS] CS que indicou'
+                        if col_cs in df_base.columns:
+                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -438,68 +427,9 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
-
-            # --------------------------------------------------------------------------
-            # PÁGINA: MAPA GEOGRÁFICO
-            # --------------------------------------------------------------------------
-            elif pagina_sel == "🗺️ Mapa Geográfico":
-                st.markdown("### 🗺️ Mapa Geográfico de Distribuição")
-                st.info("Visualização de calor por estado. Filtre a base na aba superior para ver regiões mais quentes de operação.")
-                
-                if col_estado in df_base.columns:
-                    map_l = df_base[mL].groupby(col_estado).size().reset_index(name='Leads')
-                    map_r = df_base[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
-                    map_f = df_base[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
-                    
-                    df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
-                    
-                    # Padronização e limpeza das siglas
-                    df_map[col_estado] = df_map[col_estado].astype(str).str.upper().str.strip()
-                    df_map = df_map[df_map[col_estado].str.len() == 2] # Somente siglas reais
-                    
-                    if not df_map.empty:
-                        metrica_cor = st.radio("Selecione a métrica para o Mapa de Calor:", ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos'], horizontal=True)
-                        
-                        geojson_url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
-                        
-                        fig = px.choropleth(
-                            df_map,
-                            geojson=geojson_url,
-                            locations=col_estado,
-                            featureidkey="properties.sigla",
-                            color=metrica_cor,
-                            color_continuous_scale="Blues",
-                            hover_name=col_estado,
-                            hover_data={
-                                col_estado: False,
-                                'Leads': True,
-                                'RO (Reunião Ocorrida)': True,
-                                'Fechados/Pagos': True
-                            }
-                        )
-                        fig.update_geos(fitbounds="locations", visible=False)
-                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
-                        
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        st.divider()
-                        st.subheader("📊 Tabela de Detalhamento por Estado")
-                        
-                        df_map['Leads'] = df_map['Leads'].astype(int)
-                        df_map['RO (Reunião Ocorrida)'] = df_map['RO (Reunião Ocorrida)'].astype(int)
-                        df_map['Fechados/Pagos'] = df_map['Fechados/Pagos'].astype(int)
-                        
-                        df_map['Conv. (Lead ➔ RO)'] = df_map.apply(lambda r: f"{(r['RO (Reunião Ocorrida)']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
-                        df_map['Conv. (Lead ➔ Fechado/Pago)'] = df_map.apply(lambda r: f"{(r['Fechados/Pagos']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
-                        
-                        st.dataframe(df_map.sort_values(by=metrica_cor, ascending=False), use_container_width=True, hide_index=True)
-                    else:
-                        st.warning("Nenhum dado com sigla de estado válido encontrado no período filtrado.")
-                else:
-                    st.error("A coluna '[IS] Estado' não foi encontrada na base de dados.")
 
             # --------------------------------------------------------------------------
             # PÁGINA: PRODUTOS / CLOSER'S / VC
