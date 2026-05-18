@@ -144,6 +144,11 @@ else:
         df.columns = df.columns.str.strip()
 
         col_criacao = 'Data de criação'
+        col_estado = '[IS] Estado'
+
+        # Limpeza prévia da coluna de Estados para evitar divergência de caixa ou espaços
+        if col_estado in df.columns:
+            df[col_estado] = df[col_estado].str.upper().str.strip()
 
         # Busca Dinâmica da coluna de Contato e Perdido (Inflexível a erros de aspas)
         col_1_contato = None
@@ -230,11 +235,18 @@ else:
         # FILTROS GLOBAIS
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
+            col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
+            with col_top_est:
+                if col_estado in df.columns:
+                    estados_unicos = sorted(df[col_estado].dropna().astype(str).unique().tolist())
+                    estados_unicos = [x for x in estados_unicos if len(x) == 2]
+                else:
+                    estados_unicos = []
+                estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
             with col_top3:
@@ -259,6 +271,12 @@ else:
                     closers_sel = df['Filtro_Closer'].unique().tolist()
                     cs_sel = df['Filtro_CS'].unique().tolist()
 
+        # Regra Inclusiva do Estado: Mantém se o estado bater com a seleção OU se o campo for vazio/NaN
+        if col_estado in df.columns:
+            mask_estado_global = df[col_estado].isin(estados_sel) | df[col_estado].isna() | (df[col_estado].astype(str).str.strip() == "")
+        else:
+            mask_estado_global = True
+
         # Aplicação dos Filtros Qualitativos
         df_base = df[
             (df["[IS] Origem do lead"].isin(origens_sel)) &
@@ -266,7 +284,8 @@ else:
             (df["[IS] Lead com Jornada:"].isin(jornada_sel)) &
             (df['Filtro_SDR'].isin(sdrs_sel)) &
             (df['Filtro_Closer'].isin(closers_sel)) &
-            (df['Filtro_CS'].isin(cs_sel))
+            (df['Filtro_CS'].isin(cs_sel)) &
+            mask_estado_global
         ].copy()
 
         if repescagem_filtro != "Todos":
@@ -410,15 +429,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs = '[CS] CS que indicou'
-                        if col_cs in df_base.columns:
-                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
+                        col_cs_indicou = '[CS] CS que indicou'
+                        if col_cs_indicou in df_base.columns:
+                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -428,7 +447,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -439,27 +458,23 @@ else:
                 st.markdown("### 🗺️ Mapa Geográfico de Distribuição")
                 st.info("Visualização de calor por estado. A base reflete os filtros globais aplicados na aba lateral/superior.")
                 
-                col_estado = '[IS] Estado'
                 if col_estado in df_base.columns:
-                    # Filtro exclusivo de estado extraído e operado apenas aqui dentro da aba MAPA
-                    estados_disponiveis = sorted(df_base[col_estado].dropna().astype(str).str.upper().str.strip().unique().tolist())
-                    estados_disponiveis = [x for x in estados_disponiveis if len(x) == 2]
+                    # Filtra localmente apenas quem tem estado válido de 2 letras preenchido para desenhar
+                    df_mapa_local = df_base.dropna(subset=[col_estado]).copy()
+                    df_mapa_local = df_mapa_local[df_mapa_local[col_estado].str.len() == 2]
                     
-                    estados_mapa_sel = st.multiselect("Filtrar Estados no Mapa:", estados_disponiveis, default=estados_disponiveis)
-                    
-                    # Cria a máscara do estado combinando com as máscaras globais de data que já existem!
-                    mask_estado_mapa = df_base[col_estado].astype(str).str.upper().str.strip().isin(estados_mapa_sel)
-                    
-                    map_l = df_base[mL & mask_estado_mapa].groupby(col_estado).size().reset_index(name='Leads')
-                    map_r = df_base[mR & mask_estado_mapa].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
-                    map_f = df_base[mF & mask_estado_mapa].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
+                    # Agrupamentos locais vinculados às máscaras de data originais (Index Alignment)
+                    map_l = df_mapa_local[mL].groupby(col_estado).size().reset_index(name='Leads')
+                    map_r = df_mapa_local[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
+                    map_f = df_mapa_local[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
                     
                     df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
                     
-                    # Padronização e limpeza das siglas
-                    df_map[col_estado] = df_map[col_estado].astype(str).str.upper().str.strip()
-                    df_map = df_map[df_map[col_estado].str.len() == 2] # Somente siglas reais
-                    
+                    # Trava de Segurança: Garante que as colunas existam mesmo se o resultado for 0 em datas curtas
+                    for c in ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos']:
+                        if c not in df_map.columns:
+                            df_map[c] = 0
+                            
                     if not df_map.empty:
                         metrica_cor = st.radio("Selecione a métrica para o Mapa de Calor:", ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos'], horizontal=True)
                         
