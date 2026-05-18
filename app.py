@@ -155,9 +155,9 @@ else:
 
         colunas_data = [
             col_criacao,
-            'Contato Realizado ',
+            'Contato Realizado',
             '[IS/SDR] Data do Agendamento',
-            '[IS/Closer] Reunião Ocorrida ',
+            '[IS/Closer] Reunião Ocorrida',
             'Data de fechamento',
             '[IS/SDR] Data de Fechamento Perdido'
         ]
@@ -273,9 +273,9 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
+            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
@@ -330,9 +330,9 @@ else:
 
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
 
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
