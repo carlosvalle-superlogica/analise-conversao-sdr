@@ -144,7 +144,7 @@ else:
 
         col_criacao = 'Data de criação'
 
-        # Busca Dinâmica da coluna de 1º Contato e Perdido (resistente a aspas e símbolos do HubSpot)
+        # Busca Dinâmica da coluna de Contato e Perdido (Inflexível a erros de aspas)
         col_1_contato = None
         for col in df.columns:
             if '1' in col and 'ontato' in col.lower():
@@ -155,9 +155,9 @@ else:
 
         colunas_data = [
             col_criacao,
-            'Contato Realizado',
+            'Contato Realizado ',
             '[IS/SDR] Data do Agendamento',
-            '[IS/Closer] Reunião Ocorrida',
+            '[IS/Closer] Reunião Ocorrida ',
             'Data de fechamento',
             '[IS/SDR] Data de Fechamento Perdido'
         ]
@@ -177,9 +177,6 @@ else:
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
         # --- CÁLCULO BRUTO DO TMA ---
-        # Subtração direta entre colunas datetime produz timedelta64[ns] sem conflito de dtype.
-        # Inicializar com pd.NaT e depois atribuir via .loc causava o erro
-        # "Invalid value TimedeltaArray for dtype datetime64[ns]".
         if col_1_contato and col_1_contato in df.columns and col_criacao in df.columns:
             tma_raw = df[col_1_contato] - df[col_criacao]
             tma_raw[tma_raw < pd.Timedelta(0)] = pd.NaT  # zera inversões do HubSpot
@@ -261,9 +258,9 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
+            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
@@ -318,9 +315,9 @@ else:
 
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
 
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
@@ -385,14 +382,24 @@ else:
                         col_cs = '[CS] CS que indicou'
                         if col_cs in df_base.columns:
                             mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Leads')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Ocorridos')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados')
+                            
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
+                            
                             t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
-                            t_cs['L x Ocorrido %'] = t_cs.apply(lambda r: f"{(r['Ocorridos']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0%", axis=1)
-                            t_cs['L x Fechado %'] = t_cs.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0%", axis=1)
+                            
+                            # Conversão para números inteiros limpos (sem casas decimais na visualização)
+                            t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
+                            t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
+                            t_cs['Fechados e Pagos'] = t_cs['Fechados e Pagos'].astype(int)
+                            
+                            # Colunas extras de conversão solicitadas
+                            t_cs['Conv. (Lead ➔ Ocorrido)'] = t_cs.apply(lambda r: f"{(r['Reuniões Ocorridas']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
+                            t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
+                            
                             st.dataframe(
-                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Leads', ascending=False),
+                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
