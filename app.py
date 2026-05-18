@@ -271,17 +271,18 @@ else:
         if repescagem_filtro != "Todos":
             df_base = df_base[df_base['Repescagem_Limpa'] == repescagem_filtro]
 
+        # Lógica do Filtro VC que Indicou
         if vc_filtro != "Todos":
-            col_vc = next((col for col in df_base.columns if 'vc' in col.lower() and 'indicou' in col.lower()), '[VC] VC que indicou')
-            if col_vc in df_base.columns:
-                mask_vc_filled = df_base[col_vc].notna() & (df_base[col_vc].astype(str).str.strip() != "")
+            col_cs = '[CS] CS que indicou'
+            if col_cs in df_base.columns:
                 if vc_filtro == "Sim":
-                    df_base = df_base[mask_vc_filled]
+                    # Filtra leads onde a coluna não é nula e não está vazia (É conhecido)
+                    mask_vc_sim = df_base[col_cs].notna() & (df_base[col_cs].astype(str).str.strip() != "")
+                    df_base = df_base[mask_vc_sim]
                 elif vc_filtro == "Não":
-                    df_base = df_base[~mask_vc_filled]
-            else:
-                if vc_filtro == "Sim":
-                    df_base = df_base.iloc[0:0]
+                    # Filtra leads onde a coluna é nula ou está vazia (É desconhecido)
+                    mask_vc_nao = df_base[col_cs].isna() | (df_base[col_cs].astype(str).str.strip() == "")
+                    df_base = df_base[mask_vc_nao]
 
         # Máscaras Matemáticas de Data
         if len(periodo) == 2:
