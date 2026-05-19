@@ -144,11 +144,6 @@ else:
         df.columns = df.columns.str.strip()
 
         col_criacao = 'Data de criação'
-        col_estado = '[IS] Estado'
-
-        # Limpeza prévia da coluna de Estados para evitar divergência de caixa ou espaços
-        if col_estado in df.columns:
-            df[col_estado] = df[col_estado].str.upper().str.strip()
 
         # Busca Dinâmica da coluna de Contato e Perdido (Inflexível a erros de aspas)
         col_1_contato = None
@@ -157,7 +152,8 @@ else:
                 col_1_contato = col
                 break
 
-        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
+        # Aprimoramento da busca da coluna de Perdidos (Independente se é B2B ou Aquisições)
+        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'entered' in col.lower()), None)
 
         colunas_data = [
             col_criacao,
@@ -235,18 +231,11 @@ else:
         # FILTROS GLOBAIS
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
+            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
-            with col_top_est:
-                if col_estado in df.columns:
-                    estados_unicos = sorted(df[col_estado].dropna().astype(str).unique().tolist())
-                    estados_unicos = [x for x in estados_unicos if len(x) == 2]
-                else:
-                    estados_unicos = []
-                estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
             with col_top3:
@@ -271,12 +260,6 @@ else:
                     closers_sel = df['Filtro_Closer'].unique().tolist()
                     cs_sel = df['Filtro_CS'].unique().tolist()
 
-        # Regra Inclusiva do Estado: Mantém se o estado bater com a seleção OU se o campo for vazio/NaN
-        if col_estado in df.columns:
-            mask_estado_global = df[col_estado].isin(estados_sel) | df[col_estado].isna() | (df[col_estado].astype(str).str.strip() == "")
-        else:
-            mask_estado_global = True
-
         # Aplicação dos Filtros Qualitativos
         df_base = df[
             (df["[IS] Origem do lead"].isin(origens_sel)) &
@@ -284,8 +267,7 @@ else:
             (df["[IS] Lead com Jornada:"].isin(jornada_sel)) &
             (df['Filtro_SDR'].isin(sdrs_sel)) &
             (df['Filtro_Closer'].isin(closers_sel)) &
-            (df['Filtro_CS'].isin(cs_sel)) &
-            mask_estado_global
+            (df['Filtro_CS'].isin(cs_sel))
         ].copy()
 
         if repescagem_filtro != "Todos":
@@ -429,15 +411,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs_indicou = '[CS] CS que indicou'
-                        if col_cs_indicou in df_base.columns:
-                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
+                        col_cs = '[CS] CS que indicou'
+                        if col_cs in df_base.columns:
+                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -447,7 +429,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -458,19 +440,20 @@ else:
                 st.markdown("### 🗺️ Mapa Geográfico de Distribuição")
                 st.info("Visualização de calor por estado. A base reflete os filtros globais aplicados na aba lateral/superior.")
                 
+                col_estado = '[IS] Estado'
                 if col_estado in df_base.columns:
                     # Filtra localmente apenas quem tem estado válido de 2 letras preenchido para desenhar
                     df_mapa_local = df_base.dropna(subset=[col_estado]).copy()
                     df_mapa_local = df_mapa_local[df_mapa_local[col_estado].str.len() == 2]
                     
-                    # Agrupamentos locais vinculados às máscaras de data originais (Index Alignment)
+                    # Agrupamentos locais vinculados às máscaras de data originais
                     map_l = df_mapa_local[mL].groupby(col_estado).size().reset_index(name='Leads')
                     map_r = df_mapa_local[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
                     map_f = df_mapa_local[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
                     
                     df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
                     
-                    # Trava de Segurança: Garante que as colunas existam mesmo se o resultado for 0 em datas curtas
+                    # Trava de Segurança: Garante que as colunas existam mesmo se o resultado for 0
                     for c in ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos']:
                         if c not in df_map.columns:
                             df_map[c] = 0
@@ -598,7 +581,7 @@ else:
                     mask_tma_page = df_tma_validos[col_criacao].notna() & df_tma_validos[col_1_contato].notna()
                     serie_tma = df_tma_validos.loc[mask_tma_page, 'TMA_Timedelta']
                     serie_tma = serie_tma[serie_tma.notna()]
-                    tma_medio_td = serie_tma.mean() if not serie_tma.empty else pd.NaT
+                    tma_medio_td = serie_tma.median() if not serie_tma.empty else pd.NaT
                 else:
                     tma_medio_td = pd.NaT
                     if col_1_contato:
@@ -617,13 +600,13 @@ else:
 
                 ct1, ct2 = st.columns(2)
                 ct1.metric(
-                    "TMA Médio (Data de Criação ➔ 1º Contato)",
+                    "TMA (Mediana: Criação ➔ 1º Contato)",
                     formata_tempo(tma_medio_td),
-                    "Calculado sobre toda a base filtrada que possui os dois campos preenchidos",
+                    "Ignora leads que não receberam 1º Contato",
                     delta_color="off"
                 )
                 ct2.metric(
-                    "Permanência Média (Apenas motivo 'Sem Contato')",
+                    "Permanência Média (Apenas 'Sem Contato')",
                     formata_tempo(perm_media_td),
                     "Data de Criação ➔ Data de Perdido (Mede a persistência no lead)",
                     delta_color="off"
