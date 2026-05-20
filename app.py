@@ -132,7 +132,7 @@ else:
                 partes = []
                 if dias > 0: partes.append(f"{dias} dias")
                 if horas > 0: partes.append(f"{horas} horas")
-                if minutos > 0 or not partes: partes.append(f"{minutos} min")
+                if minutes > 0 or not partes: partes.append(f"{minutos} min")
                 return ", ".join(partes)
             except:
                 return "Sem dados"
@@ -152,8 +152,7 @@ else:
                 col_1_contato = col
                 break
 
-        # Aprimoramento da busca da coluna de Perdidos (Independente se é B2B ou Aquisições)
-        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'entered' in col.lower()), None)
+        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
             col_criacao,
@@ -442,22 +441,25 @@ else:
                 
                 col_estado = '[IS] Estado'
                 if col_estado in df_base.columns:
-                    # Filtra localmente apenas quem tem estado válido de 2 letras preenchido para desenhar
-                    df_mapa_local = df_base.dropna(subset=[col_estado]).copy()
-                    df_mapa_local = df_mapa_local[df_mapa_local[col_estado].str.len() == 2]
+                    # Filtro exclusivo de estado extraído e operado apenas aqui dentro da aba MAPA
+                    estados_disponiveis = sorted(df_base[col_estado].dropna().astype(str).str.upper().str.strip().unique().tolist())
+                    estados_disponiveis = [x for x in estados_disponiveis if len(x) == 2]
                     
-                    # Agrupamentos locais vinculados às máscaras de data originais
-                    map_l = df_mapa_local[mL].groupby(col_estado).size().reset_index(name='Leads')
-                    map_r = df_mapa_local[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
-                    map_f = df_mapa_local[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
+                    estados_mapa_sel = st.multiselect("Filtrar Estados no Mapa:", estados_disponiveis, default=estados_disponiveis)
+                    
+                    # Cria a máscara do estado combinando com as máscaras globais de data que já existem!
+                    mask_estado_mapa = df_base[col_estado].astype(str).str.upper().str.strip().isin(estados_mapa_sel)
+                    
+                    map_l = df_base[mL & mask_estado_mapa].groupby(col_estado).size().reset_index(name='Leads')
+                    map_r = df_base[mR & mask_estado_mapa].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
+                    map_f = df_base[mF & mask_estado_mapa].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
                     
                     df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
                     
-                    # Trava de Segurança: Garante que as colunas existam mesmo se o resultado for 0
-                    for c in ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos']:
-                        if c not in df_map.columns:
-                            df_map[c] = 0
-                            
+                    # Padronização e limpeza das siglas
+                    df_map[col_estado] = df_map[col_estado].astype(str).str.upper().str.strip()
+                    df_map = df_map[df_map[col_estado].str.len() == 2] # Somente siglas reais
+                    
                     if not df_map.empty:
                         metrica_cor = st.radio("Selecione a métrica para o Mapa de Calor:", ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos'], horizontal=True)
                         
@@ -491,7 +493,7 @@ else:
                         df_map['Fechados/Pagos'] = df_map['Fechados/Pagos'].astype(int)
                         
                         df_map['Conv. (Lead ➔ RO)'] = df_map.apply(lambda r: f"{(r['RO (Reunião Ocorrida)']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
-                        df_map['Conv. (Lead ➔ Fechado/Pago)'] = df_map.apply(lambda r: f"{(r['Fechados/Pagos']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
+                        df_map['Conv. (Lead ➔ Fechado/Pago)'] = df_map.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
                         
                         st.dataframe(df_map.sort_values(by=metrica_cor, ascending=False), use_container_width=True, hide_index=True)
                     else:
@@ -559,12 +561,13 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: ❌ PERDIDOS
+            # PÁGINA: ❌ PERDIDOS (COORTE DE CRIAÇÃO CORRIGIDA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
 
-                df_perdidos = df_base[mP].copy()
+                # Mudança Crucial: df_perdidos passa a focar estritamente na coorte de leads CRIADOS no período (mL)
+                df_perdidos = df_base[mL & df_base['Motivo de Fechamento Perdido'].notna()].copy()
                 total_perdas = len(df_perdidos)
                 total_recebidos = mL.sum()
 
@@ -577,7 +580,6 @@ else:
                 df_tma_validos = df_base[mL].copy()
 
                 if col_1_contato and col_1_contato in df_tma_validos.columns:
-                    # Filtro booleano — seguro contra nomes de coluna com aspas e símbolos do HubSpot
                     mask_tma_page = df_tma_validos[col_criacao].notna() & df_tma_validos[col_1_contato].notna()
                     serie_tma = df_tma_validos.loc[mask_tma_page, 'TMA_Timedelta']
                     serie_tma = serie_tma[serie_tma.notna()]
