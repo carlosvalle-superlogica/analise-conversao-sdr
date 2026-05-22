@@ -296,11 +296,9 @@ else:
             col_cs = '[CS] CS que indicou'
             if col_cs in df_base.columns:
                 if vc_filtro == "Sim":
-                    # Filtra leads onde a coluna não é nula e não está vazia (É conhecido)
                     mask_vc_sim = df_base[col_cs].notna() & (df_base[col_cs].astype(str).str.strip() != "")
                     df_base = df_base[mask_vc_sim]
                 elif vc_filtro == "Não":
-                    # Filtra leads onde a coluna é nula ou está vazia (É desconhecido)
                     mask_vc_nao = df_base[col_cs].isna() | (df_base[col_cs].astype(str).str.strip() == "")
                     df_base = df_base[mask_vc_nao]
 
@@ -429,15 +427,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs_indicou = '[CS] CS que indicou'
-                        if col_cs_indicou in df_base.columns:
-                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
+                        col_cs = '[CS] CS que indicou'
+                        if col_cs in df_base.columns:
+                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -447,7 +445,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -459,22 +457,15 @@ else:
                 st.info("Visualização de calor por estado. A base reflete os filtros globais aplicados na aba lateral/superior.")
                 
                 if col_estado in df_base.columns:
-                    # Filtra localmente apenas quem tem estado válido de 2 letras preenchido para desenhar
-                    df_mapa_local = df_base.dropna(subset=[col_estado]).copy()
-                    df_mapa_local = df_mapa_local[df_mapa_local[col_estado].str.len() == 2]
-                    
-                    # Agrupamentos locais vinculados às máscaras de data originais (Index Alignment)
-                    map_l = df_mapa_local[mL].groupby(col_estado).size().reset_index(name='Leads')
-                    map_r = df_mapa_local[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
-                    map_f = df_mapa_local[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
+                    map_l = df_base[mL].groupby(col_estado).size().reset_index(name='Leads')
+                    map_r = df_base[mR].groupby(col_estado).size().reset_index(name='RO (Reunião Ocorrida)')
+                    map_f = df_base[mF].groupby(col_estado).size().reset_index(name='Fechados/Pagos')
                     
                     df_map = map_l.merge(map_r, on=col_estado, how='outer').merge(map_f, on=col_estado, how='outer').fillna(0)
                     
-                    # Trava de Segurança: Garante que as colunas existam mesmo se o resultado for 0 em datas curtas
-                    for c in ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos']:
-                        if c not in df_map.columns:
-                            df_map[c] = 0
-                            
+                    df_map[col_estado] = df_map[col_estado].astype(str).str.upper().str.strip()
+                    df_map = df_map[df_map[col_estado].str.len() == 2] 
+                    
                     if not df_map.empty:
                         metrica_cor = st.radio("Selecione a métrica para o Mapa de Calor:", ['Leads', 'RO (Reunião Ocorrida)', 'Fechados/Pagos'], horizontal=True)
                         
@@ -555,6 +546,43 @@ else:
                     col_tabela, col_vazia = st.columns([7, 3])
                     with col_tabela:
                         st.dataframe(contagem_prod.sort_values(by='Qtd. Vendida', ascending=False), use_container_width=True, hide_index=True)
+
+                    st.divider()
+                    st.subheader("🛒 Conversão por Produto de Interesse do Lead")
+                    col_interesse = '[IS/SDR] Produtos de Interesse do Lead'
+                    
+                    if col_interesse in df_base.columns:
+                        mask_interesse = df_base[col_interesse].notna() & (df_base[col_interesse].astype(str).str.strip() != "")
+                        df_int = df_base[mask_interesse].copy()
+                        
+                        if not df_int.empty:
+                            df_int['is_L'] = mL[mask_interesse]
+                            df_int['is_R'] = mR[mask_interesse]
+                            df_int['is_F'] = mF[mask_interesse]
+                            
+                            df_int[col_interesse] = df_int[col_interesse].astype(str).str.split(';')
+                            df_int = df_int.explode(col_interesse)
+                            df_int[col_interesse] = df_int[col_interesse].str.strip()
+                            df_int = df_int[df_int[col_interesse] != ""]
+                            
+                            l_int = df_int[df_int['is_L']].groupby(col_interesse).size().reset_index(name='Leads')
+                            r_int = df_int[df_int['is_R']].groupby(col_interesse).size().reset_index(name='Ocorridos')
+                            f_int = df_int[df_int['is_F']].groupby(col_interesse).size().reset_index(name='Fechados')
+                            
+                            t_int = l_int.merge(r_int, on=col_interesse, how='outer').merge(f_int, on=col_interesse, how='outer').fillna(0)
+                            
+                            t_int['Leads'] = t_int['Leads'].astype(int)
+                            t_int['Ocorridos'] = t_int['Ocorridos'].astype(int)
+                            t_int['Fechados'] = t_int['Fechados'].astype(int)
+                            
+                            t_int['L x Ocorrido (%)'] = t_int.apply(lambda row: f"{(row['Ocorridos']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "0.0%", axis=1)
+                            t_int['L x Fechado (%)'] = t_int.apply(lambda row: f"{(row['Fechados']/row['Leads']*100):.1f}%" if row['Leads'] > 0 else "0.0%", axis=1)
+                            
+                            st.dataframe(t_int.rename(columns={col_interesse: 'Produto de Interesse'}).sort_values(by='Leads', ascending=False), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("Nenhum lead com Produto de Interesse preenchido no período.")
+                    else:
+                        st.warning(f"A coluna '{col_interesse}' não foi encontrada na base de dados.")
 
                     st.divider()
                     st.subheader("🤝 Sinergia da Equipe (Conversão Ocorrido x Fechado)")
