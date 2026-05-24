@@ -184,22 +184,6 @@ else:
             df['Data Perda Blindada'] = df['Data de fechamento']
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
 
-        # --- CÁLCULO BRUTO DO TMA ---
-        if col_1_contato and col_1_contato in df.columns and col_criacao in df.columns:
-            tma_raw = df[col_1_contato] - df[col_criacao]
-            tma_raw[tma_raw < pd.Timedelta(0)] = pd.NaT
-            df['TMA_Timedelta'] = tma_raw
-        else:
-            df['TMA_Timedelta'] = pd.Series(pd.NaT, index=df.index, dtype='timedelta64[ns]')
-
-        # --- CÁLCULO DA PERSISTÊNCIA ---
-        if col_perdido_ent and col_perdido_ent in df.columns and col_criacao in df.columns:
-            perm_raw = df[col_perdido_ent] - df[col_criacao]
-            perm_raw[perm_raw < pd.Timedelta(0)] = pd.NaT
-            df['Perm_Timedelta'] = perm_raw
-        else:
-            df['Perm_Timedelta'] = pd.Series(pd.NaT, index=df.index, dtype='timedelta64[ns]')
-
         # Normalizações Qualitativas
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
         df['Filtro_Closer'] = df['[IS/SDR] Closer Responsável'].fillna('Sem Closer')
@@ -237,11 +221,18 @@ else:
         # FILTROS GLOBAIS
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
+            col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
+            with col_top_est:
+                if col_estado in df.columns:
+                    estados_unicos = sorted(df[col_estado].dropna().astype(str).unique().tolist())
+                    estados_unicos = [x for x in estados_unicos if len(x) == 2]
+                else:
+                    estados_unicos = []
+                estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
             with col_top3:
@@ -266,6 +257,12 @@ else:
                     closers_sel = df['Filtro_Closer'].unique().tolist()
                     cs_sel = df['Filtro_CS'].unique().tolist()
 
+        # Regra Inclusiva do Estado: Mantém se o estado bater com a seleção OU se o campo for vazio/NaN
+        if col_estado in df.columns:
+            mask_estado_global = df[col_estado].isin(estados_sel) | df[col_estado].isna() | (df[col_estado].astype(str).str.strip() == "")
+        else:
+            mask_estado_global = True
+
         # Aplicação dos Filtros Qualitativos
         df_base = df[
             (df["[IS] Origem do lead"].isin(origens_sel)) &
@@ -273,7 +270,8 @@ else:
             (df["[IS] Lead com Jornada:"].isin(jornada_sel)) &
             (df['Filtro_SDR'].isin(sdrs_sel)) &
             (df['Filtro_Closer'].isin(closers_sel)) &
-            (df['Filtro_CS'].isin(cs_sel))
+            (df['Filtro_CS'].isin(cs_sel)) &
+            mask_estado_global
         ].copy()
 
         if repescagem_filtro != "Todos":
@@ -303,38 +301,8 @@ else:
         else:
             p_start = data_min
             p_end = data_max
-            ano_ref = p_end.year
+            ano_ref = p_end.year if pd.notna(p_end) else 2026
             mL = mC = mA = mR = mF = mP = pd.Series([False] * len(df_base), index=df_base.index)
-
-        # ==============================================================================
-        # CÁLCULO GLOBAL DE TMA (MEDIANA) E PERMANÊNCIA (MÉDIA) - BLINDADO
-        # ==============================================================================
-        # TMA: Mediana entre Criação e 1º Contato (todos os leads válidos)
-        if col_1_contato and col_1_contato in df_base.columns:
-            mask_tma_valido = (
-                df_base[col_criacao].notna() &
-                df_base[col_1_contato].notna() &
-                (df_base['TMA_Timedelta'] > pd.Timedelta(0)) &
-                (df_base['TMA_Timedelta'].notna())
-            )
-            serie_tma = df_base[mask_tma_valido]['TMA_Timedelta']
-            tma_mediana = serie_tma.median() if len(serie_tma) > 0 else pd.NaT
-        else:
-            tma_mediana = pd.NaT
-
-        # PERMANÊNCIA: Média entre Criação e Entrada em "Perdido", apenas "Sem contato"
-        if col_perdido_ent and col_perdido_ent in df_base.columns:
-            mask_perm_valido = (
-                (df_base['Motivo de Fechamento Perdido'] == 'Sem contato') &
-                df_base[col_criacao].notna() &
-                df_base[col_perdido_ent].notna() &
-                (df_base['Perm_Timedelta'] > pd.Timedelta(0)) &
-                (df_base['Perm_Timedelta'].notna())
-            )
-            serie_perm = df_base[mask_perm_valido]['Perm_Timedelta']
-            perm_media = serie_perm.mean() if len(serie_perm) > 0 else pd.NaT
-        else:
-            perm_media = pd.NaT
 
         # ==============================================================================
         # ROTEAMENTO DE PÁGINAS E PIPELINES
@@ -640,22 +608,48 @@ else:
             elif pagina_sel == "❌ Perdidos":
                 st.markdown("### ❌ Gestão Estratégica de Perdas e Desperdício")
 
-                df_perdidos = df_base[mL & df_base['Motivo de Fechamento Perdido'].notna()].copy()
+                df_perdidos = df_base[mP].copy()
                 total_perdas = len(df_perdidos)
                 total_recebidos = mL.sum()
 
+                # ==========================================
+                # 0. ANÁLISE DE TEMPO (TMA E PERSISTÊNCIA)
+                # ==========================================
                 st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
+
+                # TMA: calculado apenas sobre a coorte de criação
+                df_tma_validos = df_base[mL].copy()
+                if col_1_contato and col_1_contato in df_tma_validos.columns:
+                    mask_tma_page = df_tma_validos[col_criacao].notna() & df_tma_validos[col_1_contato].notna()
+                    serie_tma = df_tma_validos.loc[mask_tma_page, 'TMA_Timedelta']
+                    serie_tma = serie_tma[serie_tma.notna()]
+                    tma_medio_td = serie_tma.median() if not serie_tma.empty else pd.NaT
+                else:
+                    tma_medio_td = pd.NaT
+
+                # PERMANÊNCIA: apenas leads PERDIDOS no período (mP) com motivo 'Sem contato'
+                if total_perdas > 0 and col_perdido_ent and col_perdido_ent in df_perdidos.columns:
+                    mask_sc = df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato'
+                    mask_perm_fields = df_perdidos[col_criacao].notna() & df_perdidos[col_perdido_ent].notna()
+                    df_perdidos_sc = df_perdidos[mask_sc & mask_perm_fields].copy()
+                    df_perdidos_sc['Perm_Timedelta_Real'] = df_perdidos_sc[col_perdido_ent] - df_perdidos_sc[col_criacao]
+                    
+                    serie_perm = df_perdidos_sc['Perm_Timedelta_Real']
+                    serie_perm = serie_perm[serie_perm >= pd.Timedelta(0)]
+                    perm_media_td = serie_perm.mean() if not serie_perm.empty else pd.NaT
+                else:
+                    perm_media_td = pd.NaT
 
                 ct1, ct2 = st.columns(2)
                 ct1.metric(
                     "TMA (Mediana: Criação ➔ 1º Contato)",
-                    formata_tempo(tma_mediana),
-                    "Todos os leads com ambos campos válidos",
+                    formata_tempo(tma_medio_td),
+                    "Ignora leads que não receberam 1º Contato",
                     delta_color="off"
                 )
                 ct2.metric(
                     "Permanência Média (Apenas 'Sem Contato')",
-                    formata_tempo(perm_media),
+                    formata_tempo(perm_media_td),
                     "Data de Criação ➔ Entrada na Etapa Perdido",
                     delta_color="off"
                 )
@@ -667,6 +661,9 @@ else:
                         lambda x: 'Closer' if pd.notnull(x) else 'SDR'
                     )
 
+                    # ==========================================
+                    # 1. ANÁLISE DE DESPERDÍCIO (LEADS INVÁLIDOS)
+                    # ==========================================
                     st.markdown("<h4 style='color: #B91C1C; margin-top: 10px; text-align: center;'>🗑️ Análise de Desperdício (Leads Inativos/Inválidos)</h4>", unsafe_allow_html=True)
 
                     motivos_lixo = ['Sem contato', 'Dados inconsistentes', 'Desqualificado', 'Contato duplicado']
@@ -708,6 +705,9 @@ else:
 
                     st.divider()
 
+                    # ==========================================
+                    # 2. MOTIVOS DE PERDA POR PAPEL
+                    # ==========================================
                     qtd_sdr = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'SDR'])
                     qtd_closer = len(df_perdidos[df_perdidos['Responsavel_Papel'] == 'Closer'])
 
@@ -740,6 +740,9 @@ else:
 
                     st.divider()
 
+                    # ==========================================
+                    # 3. ANÁLISE CRUZADA: ORIGEM X MOTIVO
+                    # ==========================================
                     st.subheader("📍 Análise Cruzada: Origem x Motivo de Perda")
                     st.info("A matriz abaixo exibe o volume de perdas cruzando a Origem de Marketing com o Motivo.")
                     pivot_origem = pd.crosstab(
@@ -753,11 +756,18 @@ else:
 
                     st.divider()
 
+                    # ==========================================
+                    # 4. AUDITORIA QUALITATIVA
+                    # ==========================================
                     st.subheader("🔍 Auditoria de Textos, Sub-motivos e Tempos Operacionais")
                     st.markdown("Examine cada lead para validar o tempo de resposta, o tempo de persistência e as anotações do time.")
 
+                    if 'Perm_Timedelta_Real' in df_perdidos.columns:
+                        df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta_Real'].apply(formata_tempo)
+                    else:
+                        df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta'].apply(formata_tempo)
+                        
                     df_perdidos['TMA do Lead'] = df_perdidos['TMA_Timedelta'].apply(formata_tempo)
-                    df_perdidos['Tempo no Funil'] = df_perdidos['Perm_Timedelta'].apply(formata_tempo)
 
                     col_auditoria = [
                         'Nome do negócio', 'Responsavel_Papel', 'TMA do Lead', 'Tempo no Funil',
@@ -782,3 +792,5 @@ else:
 
     except Exception as e:
         st.error(f"Erro no processamento: {e}")
+
+**[FIM DO PROMPT PARA O CLAUDE]**
