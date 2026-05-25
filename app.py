@@ -221,7 +221,7 @@ else:
         if st.session_state['perfil'] == "master":
             menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
-            menu_opcoes = ["📊 Dashboard Geral"]
+            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico"]
 
         pagina_sel = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
 
@@ -232,7 +232,7 @@ else:
             st.rerun()
 
         # ==============================================================================
-        # FILTROS GLOBAIS
+        # FILTROS GLOBAIS (ESTRITAMENTE COMO NA BASELINE)
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
             col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
@@ -445,6 +445,7 @@ else:
                 st.info("Visualização de calor por estado. A base reflete os filtros globais aplicados na aba lateral/superior.")
                 
                 if col_estado in df_base.columns:
+                    # Filtra localmente apenas quem tem estado válido de 2 letras preenchido para desenhar
                     df_mapa_local = df_base.dropna(subset=[col_estado]).copy()
                     df_mapa_local = df_mapa_local[df_mapa_local[col_estado].str.len() == 2]
                     
@@ -454,6 +455,7 @@ else:
                         
                         df_mapa_local = df_mapa_local[df_mapa_local[col_estado].isin(estados_mapa_sel)]
                         
+                        # Agrupamentos locais vinculados às máscaras de data originais usando a cópia filtrada
                         mL_mapa = (df_mapa_local['Data de criação'].dt.date >= p_start) & (df_mapa_local['Data de criação'].dt.date <= p_end)
                         mR_mapa = (df_mapa_local['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_mapa_local['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
                         mF_mapa = (df_mapa_local['Data de fechamento'].dt.date >= p_start) & (df_mapa_local['Data de fechamento'].dt.date <= p_end) & (df_mapa_local['Etapa do negócio'].isin(['Fechado', 'Pago']))
@@ -519,7 +521,7 @@ else:
                 if col_interesse in df_base.columns:
                     st.subheader("🛒 Conversão por Produto de Interesse do Lead")
                     
-                    # Isola os leads que possuem o campo preenchido
+                    # Isola os leads que possuem o campo preenchido para não quebrar a base global
                     mask_interesse = df_base[col_interesse].notna() & (df_base[col_interesse].astype(str).str.strip() != "")
                     df_int = df_base[mask_interesse].copy()
                     
@@ -529,13 +531,13 @@ else:
                         df_int['is_R'] = mR[mask_interesse]
                         df_int['is_F'] = mF[mask_interesse]
                         
-                        # Limpeza e separação do Ponto e Vírgula (;)
+                        # Quebrando múltiplos produtos separados por ;
                         df_int[col_interesse] = df_int[col_interesse].astype(str).str.split(';')
                         df_int = df_int.explode(col_interesse)
                         df_int[col_interesse] = df_int[col_interesse].str.strip()
                         df_int = df_int[df_int[col_interesse] != ""]
                         
-                        # Agrupamentos para o visual de Funil (L -> R -> F)
+                        # Agrupando por Produto
                         l_int = df_int[df_int['is_L']].groupby(col_interesse).size().reset_index(name='Leads')
                         r_int = df_int[df_int['is_R']].groupby(col_interesse).size().reset_index(name='Ocorridos')
                         f_int = df_int[df_int['is_F']].groupby(col_interesse).size().reset_index(name='Fechados')
@@ -628,7 +630,7 @@ else:
                 st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
 
                 # ==============================
-                # CÁLCULO SEGURO DO TMA
+                # CÁLCULO SEGURO DO TMA (COORTE DE CRIAÇÃO)
                 # ==============================
                 df_tma_validos = df_base[mL].copy()
                 if 'TMA_Timedelta' in df_tma_validos.columns:
@@ -638,10 +640,11 @@ else:
                     tma_medio_td = pd.NaT
 
                 # ==============================
-                # CÁLCULO SEGURO DA PERMANÊNCIA
+                # CÁLCULO SEGURO DA PERMANÊNCIA (COORTE DE CRIAÇÃO)
                 # ==============================
-                if 'Perm_Timedelta' in df_perdidos.columns:
-                    df_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
+                df_perm_validos = df_base[mL].copy()
+                if 'Perm_Timedelta' in df_perm_validos.columns:
+                    df_sc = df_perm_validos[df_perm_validos['Motivo de Fechamento Perdido'] == 'Sem contato']
                     serie_perm = df_sc['Perm_Timedelta'].dropna()
                     perm_media_td = serie_perm.mean() if not serie_perm.empty else pd.NaT
                 else:
@@ -651,13 +654,13 @@ else:
                 ct1.metric(
                     "TMA (Mediana: Criação ➔ 1º Contato)",
                     formata_tempo(tma_medio_td),
-                    "Calculado sobre a coorte de criação do período",
+                    "Calculado sobre os leads gerados neste período (Coorte de Criação)",
                     delta_color="off"
                 )
                 ct2.metric(
-                    "Permanência Média (Apenas motivo 'Sem Contato')",
+                    "Permanência Média (Apenas 'Sem Contato')",
                     formata_tempo(perm_media_td),
-                    "Data de Criação ➔ Etapa de Perdido",
+                    "Calculado sobre os leads gerados neste período (Coorte de Criação)",
                     delta_color="off"
                 )
 
