@@ -122,7 +122,7 @@ else:
         # FUNÇÃO MATEMÁTICA DE FORMATAÇÃO DE TEMPO (DIAS, HORAS, MIN)
         # ==============================================================================
         def formata_tempo(td):
-            if pd.isna(td): return "Sem dados"
+            if pd.isna(td) or td is pd.NaT: return "Sem dados"
             try:
                 total_segundos = int(td.total_seconds())
                 if total_segundos < 0: return "Sem dados"
@@ -130,10 +130,10 @@ else:
                 horas = (total_segundos % 86400) // 3600
                 minutos = (total_segundos % 3600) // 60
                 partes = []
-                if dias > 0: partes.append(f"{dias} dias")
-                if horas > 0: partes.append(f"{horas} horas")
-                if minutos > 0 or not partes: partes.append(f"{minutos} min")
-                return ", ".join(partes)
+                if dias > 0: partes.append(f"{dias}d")
+                if horas > 0: partes.append(f"{horas}h")
+                if minutos > 0 or not partes: partes.append(f"{minutos}min")
+                return " ".join(partes)
             except:
                 return "Sem dados"
 
@@ -157,13 +157,15 @@ else:
                 col_1_contato = col
                 break
 
-        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
+        col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'entered' in col.lower()), None)
+        if not col_perdido_ent:
+            col_perdido_ent = next((col for col in df.columns if 'Perdidos' in col and 'B2B' in col), None)
 
         colunas_data = [
             col_criacao,
-            'Contato Realizado',
+            'Contato Realizado ',
             '[IS/SDR] Data do Agendamento',
-            '[IS/Closer] Reunião Ocorrida',
+            '[IS/Closer] Reunião Ocorrida ',
             'Data de fechamento',
             '[IS/SDR] Data de Fechamento Perdido'
         ]
@@ -181,22 +183,6 @@ else:
         else:
             df['Data Perda Blindada'] = df['Data de fechamento']
         df['Data Perda Blindada'] = pd.to_datetime(df['Data Perda Blindada'], errors='coerce')
-
-        # --- CÁLCULO BRUTO DO TMA ---
-        if col_1_contato and col_1_contato in df.columns and col_criacao in df.columns:
-            tma_raw = df[col_1_contato] - df[col_criacao]
-            tma_raw[tma_raw < pd.Timedelta(0)] = pd.NaT  # zera inversões do HubSpot
-            df['TMA_Timedelta'] = tma_raw
-        else:
-            df['TMA_Timedelta'] = pd.Series(pd.NaT, index=df.index, dtype='timedelta64[ns]')
-
-        # --- CÁLCULO DA PERSISTÊNCIA ---
-        if col_perdido_ent and col_perdido_ent in df.columns and col_criacao in df.columns:
-            perm_raw = df[col_perdido_ent] - df[col_criacao]
-            perm_raw[perm_raw < pd.Timedelta(0)] = pd.NaT
-            df['Perm_Timedelta'] = perm_raw
-        else:
-            df['Perm_Timedelta'] = pd.Series(pd.NaT, index=df.index, dtype='timedelta64[ns]')
 
         # Normalizações Qualitativas
         df['Filtro_SDR'] = df['[IS/SDR] SDR Responsável'].fillna('Sem SDR')
@@ -221,7 +207,7 @@ else:
         if st.session_state['perfil'] == "master":
             menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
-            menu_opcoes = ["📊 Dashboard Geral"]
+            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico"]
 
         pagina_sel = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
 
@@ -235,11 +221,18 @@ else:
         # FILTROS GLOBAIS
         # ==============================================================================
         with st.expander("🔍 Parâmetros de Filtro", expanded=True):
-            col_top1, col_top2, col_top3 = st.columns([2, 1, 1])
+            col_top1, col_top_est, col_top2, col_top3 = st.columns([2, 2, 1, 1])
             with col_top1:
                 data_min = df['Data de criação'].dropna().min().date()
                 data_max = df['Data de criação'].dropna().max().date()
                 periodo = st.date_input("Período de Análise", [data_min, data_max])
+            with col_top_est:
+                if col_estado in df.columns:
+                    estados_unicos = sorted(df[col_estado].dropna().astype(str).unique().tolist())
+                    estados_unicos = [x for x in estados_unicos if len(x) == 2]
+                else:
+                    estados_unicos = []
+                estados_sel = st.multiselect("Estado", estados_unicos, default=estados_unicos)
             with col_top2:
                 repescagem_filtro = st.selectbox("Repescagem?", ["Todos", "Sim", "Não"])
             with col_top3:
@@ -264,6 +257,12 @@ else:
                     closers_sel = df['Filtro_Closer'].unique().tolist()
                     cs_sel = df['Filtro_CS'].unique().tolist()
 
+        # Regra Inclusiva do Estado: Mantém se o estado bater com a seleção OU se o campo for vazio/NaN
+        if col_estado in df.columns:
+            mask_estado_global = df[col_estado].isin(estados_sel) | df[col_estado].isna() | (df[col_estado].astype(str).str.strip() == "")
+        else:
+            mask_estado_global = True
+
         # Aplicação dos Filtros Qualitativos
         df_base = df[
             (df["[IS] Origem do lead"].isin(origens_sel)) &
@@ -271,7 +270,8 @@ else:
             (df["[IS] Lead com Jornada:"].isin(jornada_sel)) &
             (df['Filtro_SDR'].isin(sdrs_sel)) &
             (df['Filtro_Closer'].isin(closers_sel)) &
-            (df['Filtro_CS'].isin(cs_sel))
+            (df['Filtro_CS'].isin(cs_sel)) &
+            mask_estado_global
         ].copy()
 
         if repescagem_filtro != "Todos":
@@ -282,11 +282,9 @@ else:
             col_cs = '[CS] CS que indicou'
             if col_cs in df_base.columns:
                 if vc_filtro == "Sim":
-                    # Filtra leads onde a coluna não é nula e não está vazia (É conhecido)
                     mask_vc_sim = df_base[col_cs].notna() & (df_base[col_cs].astype(str).str.strip() != "")
                     df_base = df_base[mask_vc_sim]
                 elif vc_filtro == "Não":
-                    # Filtra leads onde a coluna é nula ou está vazia (É desconhecido)
                     mask_vc_nao = df_base[col_cs].isna() | (df_base[col_cs].astype(str).str.strip() == "")
                     df_base = df_base[mask_vc_nao]
 
@@ -294,14 +292,15 @@ else:
         if len(periodo) == 2:
             p_start, p_end = periodo[0], periodo[1]
             mL = (df_base['Data de criação'].dt.date >= p_start) & (df_base['Data de criação'].dt.date <= p_end)
-            mC = (df_base['Contato Realizado'].dt.date >= p_start) & (df_base['Contato Realizado'].dt.date <= p_end)
+            mC = (df_base['Contato Realizado '].dt.date >= p_start) & (df_base['Contato Realizado '].dt.date <= p_end)
             mA = (df_base['[IS/SDR] Data do Agendamento'].dt.date >= p_start) & (df_base['[IS/SDR] Data do Agendamento'].dt.date <= p_end)
-            mR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
+            mR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_base['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
             mF = (df_base['Data de fechamento'].dt.date >= p_start) & (df_base['Data de fechamento'].dt.date <= p_end) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))
             mP = (df_base['Data Perda Blindada'].dt.date >= p_start) & (df_base['Data Perda Blindada'].dt.date <= p_end) & (df_base['Motivo de Fechamento Perdido'].notna())
             ano_ref = p_end.year
         else:
-            p_end = df['Data de criação'].max()
+            p_start = data_min
+            p_end = data_max
             ano_ref = p_end.year if pd.notna(p_end) else 2026
             mL = mC = mA = mR = mF = mP = pd.Series([False] * len(df_base), index=df_base.index)
 
@@ -351,9 +350,9 @@ else:
 
                     st.subheader(f"📈 Acumulado do Ano ({ano_ref})")
                     myL = (df_base['Data de criação'].dt.year == ano_ref).sum()
-                    myC = (df_base['Contato Realizado'].dt.year == ano_ref).sum()
+                    myC = (df_base['Contato Realizado '].dt.year == ano_ref).sum()
                     myA = (df_base['[IS/SDR] Data do Agendamento'].dt.year == ano_ref).sum()
-                    myR = (df_base['[IS/Closer] Reunião Ocorrida'].dt.year == ano_ref).sum()
+                    myR = (df_base['[IS/Closer] Reunião Ocorrida '].dt.year == ano_ref).sum()
                     myF = ((df_base['Data de fechamento'].dt.year == ano_ref) & (df_base['Etapa do negócio'].isin(['Fechado', 'Pago']))).sum()
 
                     cy1, cy2, cy3, cy4, cy5 = st.columns(5)
@@ -415,15 +414,15 @@ else:
 
                     with col_ef3:
                         st.subheader("🎯 Eficiência CS")
-                        col_cs = '[CS] CS que indicou'
-                        if col_cs in df_base.columns:
-                            mask_cs = df_base[col_cs].notna() & (df_base[col_cs] != "")
+                        col_cs_indicou = '[CS] CS que indicou'
+                        if col_cs_indicou in df_base.columns:
+                            mask_cs = df_base[col_cs_indicou].notna() & (df_base[col_cs_indicou].astype(str).str.strip() != "")
                             
-                            cs_l = df_base[mL & mask_cs].groupby(col_cs).size().reset_index(name='Indicações (Leads)')
-                            cs_r = df_base[mR & mask_cs].groupby(col_cs).size().reset_index(name='Reuniões Ocorridas')
-                            cs_f = df_base[mF & mask_cs].groupby(col_cs).size().reset_index(name='Fechados e Pagos')
+                            cs_l = df_base[mL & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Indicações (Leads)')
+                            cs_r = df_base[mR & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Reuniões Ocorridas')
+                            cs_f = df_base[mF & mask_cs].groupby(col_cs_indicou).size().reset_index(name='Fechados e Pagos')
                             
-                            t_cs = cs_l.merge(cs_r, on=col_cs, how='outer').merge(cs_f, on=col_cs, how='outer').fillna(0)
+                            t_cs = cs_l.merge(cs_r, on=col_cs_indicou, how='outer').merge(cs_f, on=col_cs_indicou, how='outer').fillna(0)
                             
                             t_cs['Indicações (Leads)'] = t_cs['Indicações (Leads)'].astype(int)
                             t_cs['Reuniões Ocorridas'] = t_cs['Reuniões Ocorridas'].astype(int)
@@ -433,7 +432,7 @@ else:
                             t_cs['Conv. (Lead ➔ Fechado)'] = t_cs.apply(lambda r: f"{(r['Fechados e Pagos']/r['Indicações (Leads)']*100):.1f}%" if r['Indicações (Leads)'] > 0 else "0.0%", axis=1)
                             
                             st.dataframe(
-                                t_cs.rename(columns={col_cs: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
+                                t_cs.rename(columns={col_cs_indicou: 'CS Responsável'}).sort_values(by='Indicações (Leads)', ascending=False),
                                 use_container_width=True, hide_index=True
                             )
 
@@ -455,7 +454,7 @@ else:
                         df_mapa_local = df_mapa_local[df_mapa_local[col_estado].isin(estados_mapa_sel)]
                         
                         mL_mapa = (df_mapa_local['Data de criação'].dt.date >= p_start) & (df_mapa_local['Data de criação'].dt.date <= p_end)
-                        mR_mapa = (df_mapa_local['[IS/Closer] Reunião Ocorrida'].dt.date >= p_start) & (df_mapa_local['[IS/Closer] Reunião Ocorrida'].dt.date <= p_end)
+                        mR_mapa = (df_mapa_local['[IS/Closer] Reunião Ocorrida '].dt.date >= p_start) & (df_mapa_local['[IS/Closer] Reunião Ocorrida '].dt.date <= p_end)
                         mF_mapa = (df_mapa_local['Data de fechamento'].dt.date >= p_start) & (df_mapa_local['Data de fechamento'].dt.date <= p_end) & (df_mapa_local['Etapa do negócio'].isin(['Fechado', 'Pago']))
                         
                         map_l = df_mapa_local[mL_mapa].groupby(col_estado).size().reset_index(name='Leads')
@@ -628,21 +627,32 @@ else:
                 st.markdown("<h4 style='color: #1E40AF; margin-top: 10px;'>⏳ Análise de Tempo Operacional</h4>", unsafe_allow_html=True)
 
                 # ==============================
-                # CÁLCULO SEGURO DO TMA
+                # CÁLCULO DO TMA (COORTE DE CRIAÇÃO)
                 # ==============================
                 df_tma_validos = df_base[mL].copy()
-                if 'TMA_Timedelta' in df_tma_validos.columns:
-                    serie_tma = df_tma_validos['TMA_Timedelta'].dropna()
+                if col_1_contato and col_1_contato in df_tma_validos.columns:
+                    mask_tma_page = df_tma_validos[col_criacao].notna() & df_tma_validos[col_1_contato].notna()
+                    
+                    df_tma_validos['TMA_Temp'] = df_tma_validos[col_1_contato] - df_tma_validos[col_criacao]
+                    df_tma_validos.loc[df_tma_validos['TMA_Temp'] < pd.Timedelta(0), 'TMA_Temp'] = pd.NaT
+                    
+                    serie_tma = df_tma_validos.loc[mask_tma_page, 'TMA_Temp'].dropna()
                     tma_medio_td = serie_tma.median() if not serie_tma.empty else pd.NaT
                 else:
                     tma_medio_td = pd.NaT
 
                 # ==============================
-                # CÁLCULO SEGURO DA PERMANÊNCIA
+                # CÁLCULO DA PERMANÊNCIA (COORTE DE CRIAÇÃO)
                 # ==============================
-                if 'Perm_Timedelta' in df_perdidos.columns:
-                    df_sc = df_perdidos[df_perdidos['Motivo de Fechamento Perdido'] == 'Sem contato']
-                    serie_perm = df_sc['Perm_Timedelta'].dropna()
+                if col_perdido_ent and col_perdido_ent in df_base.columns:
+                    mask_sc = df_base['Motivo de Fechamento Perdido'] == 'Sem contato'
+                    mask_perm_fields = df_base[col_criacao].notna() & df_base[col_perdido_ent].notna()
+                    
+                    df_sc_coorte = df_base[mL & mask_sc & mask_perm_fields].copy()
+                    df_sc_coorte['Perm_Temp'] = df_sc_coorte[col_perdido_ent] - df_sc_coorte[col_criacao]
+                    df_sc_coorte.loc[df_sc_coorte['Perm_Temp'] < pd.Timedelta(0), 'Perm_Temp'] = pd.NaT
+                    
+                    serie_perm = df_sc_coorte['Perm_Temp'].dropna()
                     perm_media_td = serie_perm.mean() if not serie_perm.empty else pd.NaT
                 else:
                     perm_media_td = pd.NaT
@@ -657,7 +667,7 @@ else:
                 ct2.metric(
                     "Permanência Média (Apenas motivo 'Sem Contato')",
                     formata_tempo(perm_media_td),
-                    "Data de Criação ➔ Etapa de Perdido",
+                    "Calculado sobre a coorte de criação do período",
                     delta_color="off"
                 )
 
