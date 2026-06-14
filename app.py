@@ -219,9 +219,9 @@ else:
         st.sidebar.markdown("<br><h2 style='font-size: 1.1rem; margin-bottom: 5px;'>Módulos</h2>", unsafe_allow_html=True)
 
         if st.session_state['perfil'] == "master":
-            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico", "📦 Produtos / Closer's / VC", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
+            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico", "📦 Produtos / Closer's / VC", "📊 Comparação e Gráficos", "💰 Receita", "❌ Perdidos", "⚙️ Configurações"]
         else:
-            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico"]
+            menu_opcoes = ["📊 Dashboard Geral", "🗺️ Mapa Geográfico", "📊 Comparação e Gráficos"]
 
         pagina_sel = st.sidebar.radio("Navegação", menu_opcoes, label_visibility="collapsed")
 
@@ -613,6 +613,139 @@ else:
                     with col_mat2:
                         st.markdown("<h4 style='color: #334155;'>🔄 Visão: Closer por SDR</h4>", unsafe_allow_html=True)
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
+
+            # --------------------------------------------------------------------------
+            # PÁGINA: 📊 COMPARAÇÃO E GRÁFICOS (NOVA ABA PREMIUM SOLICITADA)
+            # --------------------------------------------------------------------------
+            elif pagina_sel == "📊 Comparação e Gráficos":
+                st.markdown("### 📊 Comparação e Evolução do Período")
+                st.info("Visão dinâmica baseada estritamente no intervalo de datas e filtros laterais/superiores selecionados.")
+
+                if not df_base.empty:
+                    # ==============================================================
+                    # SEÇÃO 1 e 2: Evolução Temporal e Tabela Mês a Mês
+                    # ==============================================================
+                    col_tempo, col_tabela_tempo = st.columns([6, 4])
+                    
+                    df_tempo = df_base.copy()
+                    df_tempo['Ano-Mês'] = df_tempo['Data de criação'].dt.to_period('M').astype(str)
+                    df_tempo['is_L'] = mL
+                    df_tempo['is_R'] = mR
+                    df_tempo['is_F'] = mF
+                    
+                    evolucao = df_tempo.groupby('Ano-Mês').agg(
+                        Leads=('is_L', 'sum'),
+                        Reuniões=('is_R', 'sum'),
+                        Fechados=('is_F', 'sum')
+                    ).reset_index()
+                    evolucao = evolucao[evolucao['Ano-Mês'] != 'NaT'].sort_values('Ano-Mês')
+
+                    with col_tempo:
+                        st.subheader("📈 Linha do Tempo (Mês a Mês)")
+                        if not evolucao.empty:
+                            evo_long = evolucao.melt(id_vars='Ano-Mês', value_vars=['Leads', 'Reuniões', 'Fechados'], 
+                                                     var_name='Métrica', value_name='Volume')
+                            fig_evo = px.line(
+                                evo_long, x='Ano-Mês', y='Volume', color='Métrica', markers=True,
+                                color_discrete_map={'Leads': '#1E40AF', 'Reuniões': '#334155', 'Fechados': '#10B981'}
+                            )
+                            fig_evo.update_layout(
+                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                font=dict(family="Inter", size=12, color="#334155"),
+                                xaxis=dict(gridcolor="#E2E8F0", title="Mês de Criação"),
+                                yaxis=dict(gridcolor="#E2E8F0", title="Volume"),
+                                margin=dict(l=0, r=0, t=10, b=0), height=350,
+                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                            )
+                            st.plotly_chart(fig_evo, use_container_width=True)
+                        else:
+                            st.warning("Sem dados temporais para gerar a evolução.")
+
+                    with col_tabela_tempo:
+                        st.subheader("📋 Tabela Comparativa (Eficiência Geral)")
+                        if not evolucao.empty:
+                            tab_evo = evolucao.copy()
+                            tab_evo['% Reunião / Lead'] = tab_evo.apply(lambda r: f"{(r['Reuniões']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
+                            tab_evo['% Fechado / Lead'] = tab_evo.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
+                            st.dataframe(tab_evo, use_container_width=True, hide_index=True)
+
+                    st.divider()
+
+                    # ==============================================================
+                    # FUNÇÃO HELPER: Gerador de Gráfico de Colunas Internas (Seção 3)
+                    # ==============================================================
+                    def plot_grafico_colunas(dimensao_coluna, titulo_grafico):
+                        st.markdown(f"<h4 style='color: #1E40AF;'>{titulo_grafico}</h4>", unsafe_allow_html=True)
+                        
+                        l_cat = df_base[mL].groupby(dimensao_coluna).size().reset_index(name='Leads')
+                        r_cat = df_base[mR].groupby(dimensao_coluna).size().reset_index(name='Reuniões')
+                        f_cat = df_base[mF].groupby(dimensao_coluna).size().reset_index(name='Fechados')
+                        
+                        t = l_cat.merge(r_cat, on=dimensao_coluna, how='outer').merge(f_cat, on=dimensao_coluna, how='outer').fillna(0)
+                        t = t[t[dimensao_coluna].astype(str).str.strip() != ""]
+                        
+                        if t.empty:
+                            st.info(f"Sem dados para {titulo_grafico}")
+                            return
+                        
+                        # Limitar a Top 15 para não achatar as barras visualmente
+                        t = t.sort_values(by='Leads', ascending=False).head(15)
+                        
+                        # Mapear o total de leads para cálculo interno da barra
+                        lead_map = dict(zip(t[dimensao_coluna], t['Leads']))
+                        
+                        t_long = t.melt(id_vars=dimensao_coluna, value_vars=['Leads', 'Reuniões', 'Fechados'], 
+                                        var_name='Métrica', value_name='Volume')
+                        
+                        # Criar o texto que vai DENTRO da barra
+                        def gera_label(row):
+                            cat = row[dimensao_coluna]
+                            met = row['Métrica']
+                            vol = int(row['Volume'])
+                            tot_l = lead_map.get(cat, 0)
+                            
+                            if met == 'Leads' or tot_l == 0:
+                                return str(vol) if vol > 0 else ""
+                            else:
+                                pct = (vol / tot_l) * 100
+                                return f"{vol}<br>({pct:.1f}%)" if vol > 0 else ""
+                                
+                        t_long['Label_Interno'] = t_long.apply(gera_label, axis=1)
+                        
+                        fig = px.bar(
+                            t_long, x=dimensao_coluna, y='Volume', color='Métrica', 
+                            barmode='group', text='Label_Interno',
+                            color_discrete_map={'Leads': '#1E40AF', 'Reuniões': '#334155', 'Fechados': '#10B981'}
+                        )
+                        fig.update_traces(textposition='inside', insidetextanchor='middle', textfont_color='white')
+                        fig.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(family="Inter", size=11, color="#334155"),
+                            xaxis=dict(title=""), yaxis=dict(showticklabels=False, title=""),
+                            margin=dict(l=0, r=0, t=10, b=0), height=380,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # ==============================================================
+                    # SEÇÃO 3: Os 6 Blocos de Filtros em Grids (Barras com Porcentagem Interna)
+                    # ==============================================================
+                    b1, b2 = st.columns(2)
+                    with b1: plot_grafico_colunas("[IS] Lead com Jornada:", "1. Jornada (Eficiência Base: Total Leads)")
+                    with b2: plot_grafico_colunas("[IS] Tipo de lead", "2. Tipo de Lead (Eficiência Base: Total Leads)")
+                    
+                    st.write("")
+                    b3, b4 = st.columns(2)
+                    with b3: plot_grafico_colunas("[IS] Origem do lead", "3. Origem / Marketing (Top 15)")
+                    with b4: plot_grafico_colunas("Filtro_SDR", "4. SDR Responsável")
+                    
+                    st.write("")
+                    b5, b6 = st.columns(2)
+                    with b5: plot_grafico_colunas("Filtro_Closer", "5. Closer Responsável")
+                    with b6: plot_grafico_colunas("[CS] CS que indicou", "6. Customer Success (CS/VC)")
+                    
+                else:
+                    st.warning("Nenhum dado encontrado para gerar os gráficos com a combinação atual de filtros.")
 
             # --------------------------------------------------------------------------
             # PÁGINA: ❌ PERDIDOS
