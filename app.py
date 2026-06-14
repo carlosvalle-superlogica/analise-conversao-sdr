@@ -615,7 +615,7 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: 📊 COMPARAÇÃO E GRÁFICOS (ABAS INTERNAS E TABELA CORRIGIDA)
+            # PÁGINA: 📊 COMPARAÇÃO E GRÁFICOS (VISÃO CONTÁBIL / COMPETÊNCIA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "📊 Comparação e Gráficos":
                 st.markdown("### 📊 Comparação Mês a Mês")
@@ -627,32 +627,40 @@ else:
                     st.info("📅 **Período analisado:** Todo o histórico disponível baseado nos filtros.")
 
                 if not df_base.empty:
-                    # Prepara a base temporal e as máscaras lógicas puras
-                    df_tempo = df_base.copy()
-                    df_tempo['Mes_Ano'] = df_tempo['Data de criação'].dt.strftime('%Y-%m').fillna("Sem Data")
-                    df_tempo['is_L'] = mL
-                    df_tempo['is_R'] = mR
-                    df_tempo['is_F'] = mF
-
-                    # Estrutura de Navegação em Abas (Evita a rolagem infinita)
+                    # Estrutura de Navegação em Abas
                     tab_geral, tab_sdr, tab_closer, tab_origem, tab_tipo, tab_jornada, tab_cs = st.tabs([
                         "📈 Visão Geral", "🎯 SDRs", "🤝 Closers", "📍 Origem", "🏷️ Tipo", "🚀 Jornada", "💎 CS/VC"
                     ])
 
                     # ==============================================================
-                    # ABA 1: VISÃO GERAL (O Gráfico de Linhas e a Tabela MoM)
+                    # ABA 1: VISÃO GERAL (O Gráfico de Linhas e a Tabela MoM) - Visão Contábil
                     # ==============================================================
                     with tab_geral:
-                        evolucao = df_tempo[df_tempo['Mes_Ano'] != 'Sem Data'].groupby('Mes_Ano').agg(
-                            Leads=('is_L', 'sum'),
-                            Reuniões=('is_R', 'sum'),
-                            Fechados=('is_F', 'sum')
-                        ).reset_index().sort_values('Mes_Ano')
+                        # LEADS (Agrupados por Data de Criação)
+                        df_l = df_base[mL].copy()
+                        df_l['Mes_Ano'] = df_l['Data de criação'].dt.strftime('%Y-%m')
+                        leads_mes = df_l.groupby('Mes_Ano').size().reset_index(name='Leads')
+
+                        # REUNIÕES (Agrupadas por Data da Reunião)
+                        df_r = df_base[mR].copy()
+                        df_r['Mes_Ano'] = df_r['[IS/Closer] Reunião Ocorrida'].dt.strftime('%Y-%m')
+                        reunioes_mes = df_r.groupby('Mes_Ano').size().reset_index(name='Reuniões')
+
+                        # FECHADOS (Agrupados por Data de Fechamento)
+                        df_f = df_base[mF].copy()
+                        df_f['Mes_Ano'] = df_f['Data de fechamento'].dt.strftime('%Y-%m')
+                        fechados_mes = df_f.groupby('Mes_Ano').size().reset_index(name='Fechados')
+
+                        # Mesclando as bases pelo Mês (Outer Join para não perder meses)
+                        evolucao = leads_mes.merge(reunioes_mes, on='Mes_Ano', how='outer').merge(fechados_mes, on='Mes_Ano', how='outer')
+                        evolucao = evolucao.fillna(0).sort_values('Mes_Ano')
+                        # Remove eventuais linhas sem data mapeada
+                        evolucao = evolucao[evolucao['Mes_Ano'].notna() & (evolucao['Mes_Ano'] != 'NaT')]
 
                         col_linha, col_tabela_geral = st.columns([6, 4])
                         
                         with col_linha:
-                            st.markdown("<h4 style='color: #334155;'>Evolução Operacional</h4>", unsafe_allow_html=True)
+                            st.markdown("<h4 style='color: #334155;'>Evolução Operacional (Visão Competência/Contábil)</h4>", unsafe_allow_html=True)
                             if not evolucao.empty:
                                 evo_long = evolucao.melt(id_vars='Mes_Ano', value_vars=['Leads', 'Reuniões', 'Fechados'], 
                                                          var_name='Métrica', value_name='Volume')
@@ -663,8 +671,8 @@ else:
                                 fig_evo.update_layout(
                                     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                                     font=dict(family="Inter", size=12, color="#334155"),
-                                    xaxis=dict(gridcolor="#E2E8F0", title="Mês"),
-                                    yaxis=dict(gridcolor="#E2E8F0", title="Volume"),
+                                    xaxis=dict(gridcolor="#E2E8F0", title="Mês da Ocorrência"),
+                                    yaxis=dict(gridcolor="#E2E8F0", title="Volume Realizado no Mês"),
                                     margin=dict(l=0, r=0, t=10, b=0), height=350,
                                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                                 )
@@ -673,41 +681,46 @@ else:
                                 st.warning("Sem dados temporais para gerar a evolução.")
 
                         with col_tabela_geral:
-                            st.markdown("<h4 style='color: #334155;'>Matriz de Eficiência Base Leads</h4>", unsafe_allow_html=True)
+                            st.markdown("<h4 style='color: #334155;'>Matriz Contábil (Eficiência Base Leads)</h4>", unsafe_allow_html=True)
                             if not evolucao.empty:
                                 tab_evo = evolucao.copy()
+                                # Converte para int para exibição mais limpa
+                                tab_evo['Leads'] = tab_evo['Leads'].astype(int)
+                                tab_evo['Reuniões'] = tab_evo['Reuniões'].astype(int)
+                                tab_evo['Fechados'] = tab_evo['Fechados'].astype(int)
+                                
                                 tab_evo['% Reunião / Lead'] = tab_evo.apply(lambda r: f"{(r['Reuniões']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
                                 tab_evo['% Fechado / Lead'] = tab_evo.apply(lambda r: f"{(r['Fechados']/r['Leads']*100):.1f}%" if r['Leads'] > 0 else "0.0%", axis=1)
                                 st.dataframe(tab_evo, use_container_width=True, hide_index=True)
 
                     # ==============================================================
-                    # FUNÇÃO HELPER: Renderiza a dinâmica das demais abas (Sem Matplotlib)
+                    # FUNÇÃO HELPER: Renderiza a dinâmica das demais abas (Contábil)
                     # ==============================================================
                     def render_aba_comparacao(dimensao_coluna, titulo_dimensao):
-                        st.markdown(f"<h4 style='color: #1E40AF;'>Análise Mês a Mês: {titulo_dimensao}</h4>", unsafe_allow_html=True)
+                        st.markdown(f"<h4 style='color: #1E40AF;'>Análise Contábil/Caixa: {titulo_dimensao}</h4>", unsafe_allow_html=True)
                         
-                        # Seletor de Métrica Dinâmico
                         metrica_selecionada = st.radio(
                             "O que você deseja comparar ao longo dos meses?", 
-                            ["Leads", "Reuniões Ocorridas", "Fechados/Pagos"], 
+                            ["Leads (Entrada)", "Reuniões Ocorridas (Execução)", "Fechados/Pagos (Caixa)"], 
                             horizontal=True, 
                             key=f"radio_{dimensao_coluna}"
                         )
-                        
-                        # Mapeia a escolha para a coluna de máscara booleana criada
-                        mapa_metricas = {
-                            "Leads": "is_L", 
-                            "Reuniões Ocorridas": "is_R", 
-                            "Fechados/Pagos": "is_F"
-                        }
-                        col_mascara = mapa_metricas[metrica_selecionada]
 
-                        # Filtra base e garante que temos dados válidos
-                        df_valido = df_tempo[df_tempo['Mes_Ano'] != 'Sem Data'].copy()
-                        df_valido = df_valido[df_valido[dimensao_coluna].astype(str).str.strip() != ""]
+                        # Isola a base e a data correta baseada na seleção (Visão Contábil)
+                        if metrica_selecionada == "Leads (Entrada)":
+                            df_val = df_base[mL].copy()
+                            df_val['Mes_Ano'] = df_val['Data de criação'].dt.strftime('%Y-%m')
+                        elif metrica_selecionada == "Reuniões Ocorridas (Execução)":
+                            df_val = df_base[mR].copy()
+                            df_val['Mes_Ano'] = df_val['[IS/Closer] Reunião Ocorrida'].dt.strftime('%Y-%m')
+                        elif metrica_selecionada == "Fechados/Pagos (Caixa)":
+                            df_val = df_base[mF].copy()
+                            df_val['Mes_Ano'] = df_val['Data de fechamento'].dt.strftime('%Y-%m')
+
+                        df_val = df_val.dropna(subset=['Mes_Ano'])
+                        df_val = df_val[df_val[dimensao_coluna].astype(str).str.strip() != ""]
                         
-                        # Agrupamento para a métrica escolhida
-                        pivot_dados = df_valido.groupby([dimensao_coluna, 'Mes_Ano'])[col_mascara].sum().reset_index(name='Volume')
+                        pivot_dados = df_val.groupby([dimensao_coluna, 'Mes_Ano']).size().reset_index(name='Volume')
                         
                         if pivot_dados['Volume'].sum() == 0:
                             st.info(f"Nenhum dado de {metrica_selecionada} para exibir sob estes filtros.")
@@ -724,35 +737,31 @@ else:
                             y='Volume', 
                             color='Mes_Ano', 
                             barmode='group',
-                            text='Volume', # <-- Garante que o valor fique escrito na barra
+                            text='Volume',
                             color_discrete_sequence=px.colors.sequential.Blues_r
                         )
                         fig_barras.update_traces(textposition='inside', textfont_color='white')
                         fig_barras.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(family="Inter", size=12, color="#334155"),
-                            xaxis=dict(title=""), yaxis=dict(title="Volume Acumulado"),
+                            xaxis=dict(title=""), yaxis=dict(title=f"Total de {metrica_selecionada}"),
                             margin=dict(l=0, r=0, t=20, b=0), height=380,
-                            legend_title="Meses"
+                            legend_title="Mês do Evento"
                         )
                         st.plotly_chart(fig_barras, use_container_width=True)
 
                         st.divider()
 
-                        # 2. Plotagem da Tabela Histórica (Removido o background_gradient que causou o erro)
+                        # 2. Plotagem da Tabela Histórica
                         st.markdown(f"<h5 style='color: #334155;'>Tabela Histórica Completa de {metrica_selecionada}</h5>", unsafe_allow_html=True)
                         
-                        # Pivotando a tabela para que as linhas sejam a Dimensão e as colunas sejam os Meses
                         matriz = pivot_dados.pivot(index=dimensao_coluna, columns='Mes_Ano', values='Volume').fillna(0).astype(int)
-                        
-                        # Adiciona uma coluna de TOTAL para facilitar a leitura
                         matriz['TOTAL PERÍODO'] = matriz.sum(axis=1)
                         matriz = matriz.sort_values(by='TOTAL PERÍODO', ascending=False)
                         
-                        # Renderiza o dataframe padrão nativo do Streamlit (Sem depender do matplotlib)
                         st.dataframe(matriz, use_container_width=True)
 
-                    # Renderizando as abas utilizando a função Helper
+                    # Renderizando as abas
                     with tab_sdr: render_aba_comparacao("Filtro_SDR", "SDR Responsável")
                     with tab_closer: render_aba_comparacao("Filtro_Closer", "Closer Responsável")
                     with tab_origem: render_aba_comparacao("[IS] Origem do lead", "Origem / Marketing")
