@@ -615,7 +615,7 @@ else:
                         st.dataframe(pivot_closer_sdr, use_container_width=True)
 
             # --------------------------------------------------------------------------
-            # PÁGINA: 📊 COMPARAÇÃO E GRÁFICOS (ABAS INTERNAS E HEATMAP)
+            # PÁGINA: 📊 COMPARAÇÃO E GRÁFICOS (ABAS INTERNAS E TABELA CORRIGIDA)
             # --------------------------------------------------------------------------
             elif pagina_sel == "📊 Comparação e Gráficos":
                 st.markdown("### 📊 Comparação Mês a Mês")
@@ -681,7 +681,7 @@ else:
                                 st.dataframe(tab_evo, use_container_width=True, hide_index=True)
 
                     # ==============================================================
-                    # FUNÇÃO HELPER: Renderiza a dinâmica das demais abas
+                    # FUNÇÃO HELPER: Renderiza a dinâmica das demais abas (Sem Matplotlib)
                     # ==============================================================
                     def render_aba_comparacao(dimensao_coluna, titulo_dimensao):
                         st.markdown(f"<h4 style='color: #1E40AF;'>Análise Mês a Mês: {titulo_dimensao}</h4>", unsafe_allow_html=True)
@@ -724,8 +724,10 @@ else:
                             y='Volume', 
                             color='Mes_Ano', 
                             barmode='group',
+                            text='Volume', # <-- Garante que o valor fique escrito na barra
                             color_discrete_sequence=px.colors.sequential.Blues_r
                         )
+                        fig_barras.update_traces(textposition='inside', textfont_color='white')
                         fig_barras.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(family="Inter", size=12, color="#334155"),
@@ -737,8 +739,8 @@ else:
 
                         st.divider()
 
-                        # 2. Plotagem da Matriz de Calor (Heatmap Table)
-                        st.markdown(f"<h5 style='color: #334155;'>Matriz de Calor: Histórico Completo de {metrica_selecionada}</h5>", unsafe_allow_html=True)
+                        # 2. Plotagem da Tabela Histórica (Removido o background_gradient que causou o erro)
+                        st.markdown(f"<h5 style='color: #334155;'>Tabela Histórica Completa de {metrica_selecionada}</h5>", unsafe_allow_html=True)
                         
                         # Pivotando a tabela para que as linhas sejam a Dimensão e as colunas sejam os Meses
                         matriz = pivot_dados.pivot(index=dimensao_coluna, columns='Mes_Ano', values='Volume').fillna(0).astype(int)
@@ -747,10 +749,8 @@ else:
                         matriz['TOTAL PERÍODO'] = matriz.sum(axis=1)
                         matriz = matriz.sort_values(by='TOTAL PERÍODO', ascending=False)
                         
-                        # Aplica o gradiente de cor do Pandas Styler
-                        matriz_estilizada = matriz.style.background_gradient(cmap='Blues', axis=None)
-                        
-                        st.dataframe(matriz_estilizada, use_container_width=True)
+                        # Renderiza o dataframe padrão nativo do Streamlit (Sem depender do matplotlib)
+                        st.dataframe(matriz, use_container_width=True)
 
                     # Renderizando as abas utilizando a função Helper
                     with tab_sdr: render_aba_comparacao("Filtro_SDR", "SDR Responsável")
